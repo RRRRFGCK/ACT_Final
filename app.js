@@ -610,7 +610,19 @@ function shuffleArray(items) {
   return items;
 }
 function setMathHTML(element, value) {
-  element.innerHTML = escapeHtml(value || "").replace(/\n/g, "<br>");
+  element.innerHTML = escapeHtml(wrapBareLatex(value || "")).replace(/\n/g, "<br>");
+}
+
+function wrapBareLatex(value) {
+  return String(value)
+    .split("\n")
+    .map((line) => {
+      if (/\$|\\\(|\\\[/.test(line)) return line;
+      const trimmed = line.trim();
+      const looksLikeFormula = /\\(?:sqrt|frac|times|cdot|sum|int|log|ln|sin|cos|tan|alpha|beta|gamma|rho|sigma|mu|mathbf|begin|end)|\^\{|_\{|[=<>≤≥]\s*-?\d/.test(trimmed);
+      return looksLikeFormula ? line.replace(trimmed, `$${trimmed}$`) : line;
+    })
+    .join("\n");
 }
 
 function renderMath(root = document.body, tries = 0) {
@@ -623,6 +635,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 

@@ -36,7 +36,7 @@
                   "Return only valid JSON, with no markdown fences.",
                   "Schema: {\"question\": string, \"options\": [{\"label\": \"A\", \"text\": string}], \"correctAnswer\": string, \"answer\": string, \"explanation\": string, \"notes\": string}.",
                   "Extract every visible option as a separate options array item. Preserve mathematical notation carefully.",
-                  "Use LaTeX for exponents, matrices, subscripts, Greek letters, probabilities, and equations.",
+                  "Use LaTeX for exponents, matrices, subscripts, Greek letters, probabilities, and equations. Wrap every mathematical expression in $...$ so it can be rendered by MathJax, for example $\\sqrt{4^2 + 1.5^2} = 4.272$.",
                   "Keep option labels as A, B, C, D, E when present.",
                   "If a visible tick, x mark, bracket, highlight, or handwritten mark clearly indicates an answer, put that label in correctAnswer.",
                   "If no answer is visibly marked, solve the question and put the best option label in correctAnswer.",
@@ -92,6 +92,7 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 };
+
 
 
 
