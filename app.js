@@ -45,6 +45,11 @@ const els = {
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 els.imageInput.addEventListener("change", handleImageChange);
+document.addEventListener("paste", handlePasteImage);
+const dropZone = document.querySelector(".drop-zone");
+dropZone?.addEventListener("dragover", handleDragOver);
+dropZone?.addEventListener("dragleave", handleDragLeave);
+dropZone?.addEventListener("drop", handleDropImage);
 els.aiExtractButton.addEventListener("click", runAiExtract);
 els.saveQuestionButton.addEventListener("click", saveQuestionFromForm);
 els.generateExplanationButton.addEventListener("click", generateExplanationDraft);
@@ -92,14 +97,42 @@ function showView(name) {
 }
 
 function handleImageChange(event) {
-  const file = event.target.files[0];
-  if (!file) return;
+  setSelectedImage(event.target.files[0], "图片");
+}
+
+function setSelectedImage(file, sourceLabel = "图片") {
+  if (!file || !file.type?.startsWith("image/")) {
+    setStatus("请上传图片文件");
+    return;
+  }
   selectedImage = file;
   els.previewImage.src = URL.createObjectURL(file);
   els.previewImage.hidden = false;
-  els.ocrStatus.textContent = "图片已选择，可以开始识别";
+  setStatus(`${sourceLabel}已选择，可以开始 AI 识别`);
 }
 
+function handlePasteImage(event) {
+  const item = [...(event.clipboardData?.items || [])].find((entry) => entry.type.startsWith("image/"));
+  if (!item) return;
+  event.preventDefault();
+  setSelectedImage(item.getAsFile(), "剪贴板图片");
+}
+
+function handleDragOver(event) {
+  event.preventDefault();
+  document.querySelector(".drop-zone")?.classList.add("drag-over");
+}
+
+function handleDragLeave() {
+  document.querySelector(".drop-zone")?.classList.remove("drag-over");
+}
+
+function handleDropImage(event) {
+  event.preventDefault();
+  document.querySelector(".drop-zone")?.classList.remove("drag-over");
+  const file = [...(event.dataTransfer?.files || [])].find((entry) => entry.type.startsWith("image/"));
+  setSelectedImage(file, "拖拽图片");
+}
 async function runAiExtract() {
   if (!selectedImage) return setStatus("请先选择一张图片");
   if (location.protocol === "file:") return setStatus("AI 识别需要在 Vercel 网址上使用");
@@ -590,6 +623,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 

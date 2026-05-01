@@ -526,3 +526,9 @@ textarea:focus {
   margin: 14px 0;
 }
 
+
+.drop-zone.drag-over {
+  border-color: var(--accent);
+  background: #edf7f4;
+  box-shadow: inset 0 0 0 3px rgba(28, 107, 99, 0.12);
+}
