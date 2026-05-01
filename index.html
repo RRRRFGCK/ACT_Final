@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
@@ -13,7 +13,7 @@
           <div class="brand-mark">FR</div>
           <div>
             <h1>合规复习题库</h1>
-            <p>练习题整理 · OCR · 查重 · 解析</p>
+            <p>练习题整理 · OCR · AI 识别 · 查重</p>
           </div>
         </div>
 
@@ -25,18 +25,9 @@
         </nav>
 
         <section class="stats">
-          <div>
-            <span id="statTotal">0</span>
-            <small>题目</small>
-          </div>
-          <div>
-            <span id="statWithExplanations">0</span>
-            <small>有解析</small>
-          </div>
-          <div>
-            <span id="statReviewed">0</span>
-            <small>已复习</small>
-          </div>
+          <div><span id="statTotal">0</span><small>题目</small></div>
+          <div><span id="statWithExplanations">0</span><small>有解析</small></div>
+          <div><span id="statReviewed">0</span><small>已复习</small></div>
         </section>
       </aside>
 
@@ -45,7 +36,7 @@
           <div class="page-heading">
             <div>
               <h2>上传练习题</h2>
-              <p>适合整理老师允许分享的练习题、公开往年题、自己拍照记录的错题。</p>
+              <p>上传题目截图后，可以用 AI 精准识别题干、公式和选择题选项。</p>
             </div>
             <button class="secondary-button" id="clearFormButton">清空</button>
           </div>
@@ -55,61 +46,34 @@
               <label class="drop-zone" for="questionImage">
                 <input id="questionImage" type="file" accept="image/*" />
                 <span class="drop-title">选择图片</span>
-                <span class="drop-subtitle">支持截图、照片、扫描图。识别后可以手动修改。</span>
+                <span class="drop-subtitle">支持截图、照片、扫描图。AI 会尽量保留公式、矩阵、上下标和选项。</span>
               </label>
               <img id="previewImage" class="preview-image" alt="题目预览" hidden />
               <div class="ocr-row">
-                <button class="primary-button" id="ocrButton">识别文字</button>
+                <button class="primary-button" id="aiExtractButton">AI 精准识别</button>
+                <button class="secondary-button" id="ocrButton">普通 OCR</button>
                 <span id="ocrStatus">等待上传图片</span>
               </div>
             </section>
 
             <section class="panel editor-panel">
               <div class="form-grid">
-                <label>
-                  课程
-                  <input id="courseInput" type="text" placeholder="例如 Software Engineering" />
-                </label>
-                <label>
-                  章节
-                  <input id="topicInput" type="text" placeholder="例如 Testing / Security" />
-                </label>
-                <label>
-                  题型
-                  <select id="typeInput">
-                    <option>选择题</option>
-                    <option>简答题</option>
-                    <option>计算题</option>
-                    <option>代码题</option>
-                    <option>案例分析</option>
-                    <option>其他</option>
-                  </select>
-                </label>
-                <label>
-                  难度
-                  <select id="difficultyInput">
-                    <option>普通</option>
-                    <option>简单</option>
-                    <option>困难</option>
-                  </select>
-                </label>
+                <label>课程<input id="courseInput" type="text" placeholder="例如 Advanced Communication Theory" /></label>
+                <label>章节<input id="topicInput" type="text" placeholder="例如 Detection / Gaussian noise" /></label>
+                <label>题型<select id="typeInput"><option>选择题</option><option>简答题</option><option>计算题</option><option>代码题</option><option>案例分析</option><option>其他</option></select></label>
+                <label>难度<select id="difficultyInput"><option>普通</option><option>简单</option><option>困难</option></select></label>
               </div>
 
-              <label>
-                题目内容
-                <textarea id="questionInput" rows="9" placeholder="OCR 结果会出现在这里，也可以直接粘贴题目。"></textarea>
-              </label>
+              <label>题目内容<textarea id="questionInput" rows="8" placeholder="AI/OCR 结果会出现在这里，也可以直接粘贴题目。"></textarea></label>
+              <label>选项<textarea id="optionsInput" rows="5" placeholder="每行一个选项，例如：A. 2.25 × 10^{-6}"></textarea></label>
 
-              <label>
-                答案
-                <textarea id="answerInput" rows="3" placeholder="可选：先留空也可以。"></textarea>
-              </label>
+              <div class="form-grid">
+                <label>正确选项<input id="correctAnswerInput" type="text" placeholder="例如 C" /></label>
+                <label>标签<input id="tagsInput" type="text" placeholder="用逗号分隔，例如 Gaussian, matrix, MAP" /></label>
+              </div>
 
-              <label>
-                标签
-                <input id="tagsInput" type="text" placeholder="用逗号分隔，例如 recursion, UML, risk" />
-              </label>
-
+              <label>答案/备注<textarea id="answerInput" rows="3" placeholder="可选：补充最终答案、老师标注或自己的备注。"></textarea></label>
+              <label>AI 解析<textarea id="explanationInput" rows="5" placeholder="AI 生成的解析会出现在这里，也可以自己修改。"></textarea></label>
               <div class="duplicate-preview" id="duplicatePreview" hidden></div>
 
               <div class="action-row">
@@ -122,48 +86,28 @@
 
         <section class="view" id="libraryView">
           <div class="page-heading">
-            <div>
-              <h2>题库</h2>
-              <p>搜索、筛选、编辑和查看解析。</p>
-            </div>
+            <div><h2>题库</h2><p>搜索、筛选、编辑和查看解析。</p></div>
             <button class="danger-button" id="exportButton">导出 JSON</button>
           </div>
-
           <div class="filters">
-            <input id="searchInput" type="search" placeholder="搜索题干、课程、章节、标签" />
-            <select id="courseFilter">
-              <option value="">全部课程</option>
-            </select>
-            <select id="statusFilter">
-              <option value="">全部状态</option>
-              <option value="explained">有解析</option>
-              <option value="todo">待解析</option>
-              <option value="reviewed">已复习</option>
-            </select>
+            <input id="searchInput" type="search" placeholder="搜索题干、选项、课程、章节、标签" />
+            <select id="courseFilter"><option value="">全部课程</option></select>
+            <select id="statusFilter"><option value="">全部状态</option><option value="explained">有解析</option><option value="todo">待解析</option><option value="reviewed">已复习</option></select>
           </div>
-
           <div class="question-list" id="questionList"></div>
         </section>
 
         <section class="view" id="reviewView">
           <div class="page-heading">
-            <div>
-              <h2>刷题</h2>
-              <p>随机抽一题，先想答案，再打开解析。</p>
-            </div>
+            <div><h2>刷题</h2><p>随机抽一题，先想答案，再打开解析。</p></div>
             <button class="primary-button" id="randomQuestionButton">随机一题</button>
           </div>
-          <section class="panel review-panel" id="reviewPanel">
-            <p class="empty-state">题库里有题后，这里会显示随机题目。</p>
-          </section>
+          <section class="panel review-panel" id="reviewPanel"><p class="empty-state">题库里有题后，这里会显示随机题目。</p></section>
         </section>
 
         <section class="view" id="duplicatesView">
           <div class="page-heading">
-            <div>
-              <h2>重复检测</h2>
-              <p>找出相似题，人工确认是否合并或保留。</p>
-            </div>
+            <div><h2>重复检测</h2><p>用题干和选项一起比较，找出相似题。</p></div>
             <button class="secondary-button" id="scanDuplicatesButton">重新扫描</button>
           </div>
           <div class="duplicate-list" id="duplicateList"></div>
@@ -194,3 +138,5 @@
     <script src="./app.js"></script>
   </body>
 </html>
+
+

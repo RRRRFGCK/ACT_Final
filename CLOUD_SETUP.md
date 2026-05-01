@@ -125,3 +125,33 @@ window.APP_CONFIG = {
 4. 重复题合并
 5. 管理员审核
 6. 后端 AI 解析
+
+## OpenAI 图片识别上线步骤
+
+### 1. 给 Supabase 表增加选择题字段
+
+在 Supabase SQL Editor 运行：
+
+```sql
+alter table public.questions
+add column if not exists options jsonb default '[]'::jsonb,
+add column if not exists correct_answer text default '';
+```
+
+### 2. 在 Vercel 添加 OpenAI API Key
+
+进入 Vercel 项目 `act-final`：
+
+`Settings -> Environment Variables`
+
+添加：
+
+```text
+OPENAI_API_KEY=你的 OpenAI API key
+```
+
+只添加到 Vercel 环境变量，不要写进 `config.js` 或前端代码。
+
+### 3. 重新部署
+
+把本地代码推送到 GitHub 后，Vercel 会自动重新部署。部署完成后，打开线上网址，上传图片并点击 `AI 精准识别`。
