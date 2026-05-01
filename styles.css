@@ -500,3 +500,10 @@ textarea:focus {
   background: #fff2f0;
   color: #a33830;
 }
+
+.review-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin: 14px 0;
+}

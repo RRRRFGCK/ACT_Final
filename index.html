@@ -3,17 +3,17 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>合规复习题库</title>
+    <title>Imperial CSP ACT 复习</title>
     <link rel="stylesheet" href="./styles.css" />
   </head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand">
-          <div class="brand-mark">FR</div>
+          <div class="brand-mark">ACT</div>
           <div>
-            <h1>合规复习题库</h1>
-            <p>练习题整理 · OCR · AI 识别 · 查重</p>
+            <h1>Imperial CSP ACT 复习</h1>
+            <p>ACT 选择题整理 · AI 识别 · 刷题复习</p>
           </div>
         </div>
 
@@ -35,8 +35,8 @@
         <section class="view active" id="uploadView">
           <div class="page-heading">
             <div>
-              <h2>上传练习题</h2>
-              <p>上传题目截图后，可以用 AI 精准识别题干、公式和选择题选项。</p>
+              <h2>上传 ACT 练习题</h2>
+              <p>保留题目原图，AI 自动提取选项、答案和解析。</p>
             </div>
             <button class="secondary-button" id="clearFormButton">清空</button>
           </div>
@@ -86,7 +86,7 @@
 
         <section class="view" id="libraryView">
           <div class="page-heading">
-            <div><h2>题库</h2><p>搜索、筛选、编辑和查看解析。</p></div>
+            <div><h2>ACT 题库</h2><p>按课程、章节、关键词和选项快速查找。</p></div>
             <button class="danger-button" id="exportButton">导出 JSON</button>
           </div>
           <div class="filters">
@@ -99,7 +99,7 @@
 
         <section class="view" id="reviewView">
           <div class="page-heading">
-            <div><h2>刷题</h2><p>随机抽一题，先想答案，再打开解析。</p></div>
+            <div><h2>选择题练习</h2><p>看原图，点击选项，确认后查看答案和解析。</p></div>
             <button class="primary-button" id="randomQuestionButton">随机一题</button>
           </div>
           <section class="panel review-panel" id="reviewPanel"><p class="empty-state">题库里有题后，这里会显示随机题目。</p></section>
@@ -131,11 +131,23 @@
         <div class="explanation-block"></div>
       </article>
     </template>
-    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+    <script>
+      window.MathJax = {
+        tex: {
+          inlineMath: [["$", "$"], ["\\(", "\\)"]],
+          displayMath: [["$$", "$$"], ["\\[", "\\]"]],
+          processEscapes: true
+        },
+        svg: { fontCache: "global" }
+      };
+    </script>
+    <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"></script>    <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
+
+
 
 
 

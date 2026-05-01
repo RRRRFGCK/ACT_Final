@@ -1,4 +1,4 @@
-﻿export default async function handler(request, response) {
+﻿module.exports = async function handler(request, response) {
   if (request.method !== "POST") {
     response.status(405).json({ error: "Method not allowed" });
     return;
@@ -40,8 +40,8 @@
                   "Keep option labels as A, B, C, D, E when present.",
                   "If a visible tick, x mark, bracket, highlight, or handwritten mark clearly indicates an answer, put that label in correctAnswer.",
                   "If no answer is visibly marked, solve the question and put the best option label in correctAnswer.",
-                  "Put the final answer in answer.",
-                  "Write a concise Chinese explanation in explanation, including the key formula and steps.",
+                  "Put only the final answer value/content in answer, not a sentence and not the option label. For example, use \"60.625\" or \"6.25 \\times 10^{-6}\", not \"The correct answer is B\" and not \"B\".",
+                  "Write a concise Chinese explanation in explanation, including the key formula and steps. The explanation may mention the option label, but answer must not.",
                   "Still prioritize accurate transcription of the visible question and options."
                 ].join(" ")
               },
@@ -91,6 +91,8 @@ function parseJsonOutput(text) {
     if (match) return JSON.parse(match[0]);
     throw new Error("AI did not return valid JSON.");
   }
-}
+};
+
+
 
 

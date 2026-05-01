@@ -5,6 +5,7 @@ let editingId = null;
 let selectedImage = null;
 let dbMode = "local";
 let supabaseClient = null;
+let currentReviewQuestionId = null;
 
 const els = {
   views: document.querySelectorAll(".view"),
@@ -59,6 +60,7 @@ els.optionsInput.addEventListener("input", renderDuplicatePreview);
 
 renderAll();
 initCloudMode();
+window.addEventListener("load", () => renderMath());
 
 async function initCloudMode() {
   const config = window.APP_CONFIG || {};
@@ -86,6 +88,7 @@ function showView(name) {
   els.views.forEach((view) => view.classList.remove("active"));
   document.getElementById(`${name}View`).classList.add("active");
   if (name === "duplicates") renderDuplicates();
+  if (name === "review") renderRandomQuestion();
 }
 
 function handleImageChange(event) {
@@ -121,7 +124,7 @@ async function runAiExtract() {
     els.questionInput.value = data.question || "";
     els.optionsInput.value = formatOptions(data.options || []);
     els.correctAnswerInput.value = data.correctAnswer || "";
-    els.answerInput.value = data.answer || data.correctAnswer || "";
+    els.answerInput.value = normalizeAnswerContent(data.answer, data.correctAnswer, data.options || []);
     els.explanationInput.value = data.explanation || data.notes || "";
     setStatus("AI 识别完成，建议快速检查一遍");
     renderDuplicatePreview();
@@ -136,35 +139,55 @@ async function runAiExtract() {
 async function saveQuestionFromForm() {
   const text = els.questionInput.value.trim();
   if (!text) return showFormMessage("题目内容不能为空。");
-  const now = new Date().toISOString();
-  const existing = editingId ? questions.find((question) => question.id === editingId) : null;
-  const question = {
-    id: editingId || crypto.randomUUID(),
-    course: els.courseInput.value.trim() || "未分类课程",
-    topic: els.topicInput.value.trim() || "未分类章节",
-    type: els.typeInput.value,
-    difficulty: els.difficultyInput.value,
-    text,
-    options: parseOptions(els.optionsInput.value),
-    correctAnswer: els.correctAnswerInput.value.trim().toUpperCase(),
-    answer: els.answerInput.value.trim(),
-    explanation: els.explanationInput.value.trim() || existing?.explanation || els.questionInput.dataset.explanationDraft || "",
-    imageData: selectedImage ? await fileToResizedDataUrl(selectedImage) : existing?.imageData || "",
-    tags: parseTags(els.tagsInput.value),
-    reviewed: existing?.reviewed || false,
-    createdAt: existing?.createdAt || now,
-    updatedAt: now
-  };
-  if (dbMode === "cloud") await saveCloudQuestion(question);
-  else {
-    questions = editingId ? questions.map((item) => (item.id === editingId ? question : item)) : [question, ...questions];
-    persistQuestions();
-    renderAll();
-  }
-  resetForm();
-  showView("library");
-}
 
+  const wasEditing = Boolean(editingId);
+  els.saveQuestionButton.disabled = true;
+  els.saveQuestionButton.textContent = wasEditing ? "正在更新..." : "正在保存...";
+  setStatus(wasEditing ? "正在更新题目..." : "正在保存题目...");
+
+  try {
+    const now = new Date().toISOString();
+    const existing = editingId ? questions.find((question) => question.id === editingId) : null;
+    const question = {
+      id: editingId || crypto.randomUUID(),
+      course: els.courseInput.value.trim() || "未分类课程",
+      topic: els.topicInput.value.trim() || "未分类章节",
+      type: els.typeInput.value,
+      difficulty: els.difficultyInput.value,
+      text,
+      options: parseOptions(els.optionsInput.value),
+      correctAnswer: els.correctAnswerInput.value.trim().toUpperCase(),
+      answer: els.answerInput.value.trim(),
+      explanation: els.explanationInput.value.trim() || existing?.explanation || els.questionInput.dataset.explanationDraft || "",
+      imageData: selectedImage ? await fileToResizedDataUrl(selectedImage) : existing?.imageData || "",
+      tags: parseTags(els.tagsInput.value),
+      reviewed: existing?.reviewed || false,
+      createdAt: existing?.createdAt || now,
+      updatedAt: now
+    };
+
+    if (dbMode === "cloud") {
+      await saveCloudQuestion(question);
+      await fetchCloudQuestions();
+    } else {
+      questions = editingId ? questions.map((item) => (item.id === editingId ? question : item)) : [question, ...questions];
+      persistQuestions();
+      renderAll();
+    }
+
+    resetForm();
+    renderAll();
+    showView("library");
+    setStatus(wasEditing ? "已更新，题库已刷新" : "已保存，题库已刷新");
+  } catch (error) {
+    console.error(error);
+    showFormMessage(error.message || "保存失败，请稍后再试。");
+    setStatus("保存失败");
+  } finally {
+    els.saveQuestionButton.disabled = false;
+    els.saveQuestionButton.textContent = wasEditing ? "更新题目" : "保存题目";
+  }
+}
 async function saveCloudQuestion(question) {
   const payload = toCloudQuestion(question);
   const request = editingId ? supabaseClient.from("questions").update(payload).eq("id", editingId) : supabaseClient.from("questions").insert(payload);
@@ -253,6 +276,7 @@ function renderLibrary() {
     return;
   }
   filtered.forEach((question) => els.questionList.append(renderQuestionCard(question)));
+  renderMath(els.questionList);
 }
 
 function renderQuestionCard(question) {
@@ -278,14 +302,14 @@ function renderQuestionCard(question) {
     chips.append(chip);
   });
   title.textContent = question.reviewed ? "已复习" : "待复习";
-  text.textContent = question.text;
+  setMathHTML(text, question.text);
   const optionText = formatOptions(question.options || []);
-  answer.textContent = [
+  setMathHTML(answer, [
     optionText ? `选项：\n${optionText}` : "",
     question.correctAnswer ? `正确选项：${question.correctAnswer}` : "",
     question.answer ? `答案/备注：\n${question.answer}` : ""
-  ].filter(Boolean).join("\n\n");
-  explanation.textContent = question.explanation ? `解析：\n${question.explanation}` : "";
+  ].filter(Boolean).join("\n\n"));
+  setMathHTML(explanation, question.explanation ? `解析：\n${question.explanation}` : "");
   node.querySelector(".edit-button").addEventListener("click", () => editQuestion(question.id));
   node.querySelector(".reviewed-button").addEventListener("click", () => toggleReviewed(question.id));
   node.querySelector(".delete-button").addEventListener("click", () => deleteQuestion(question.id));
@@ -330,23 +354,38 @@ async function toggleReviewed(id) {
 
 async function deleteQuestion(id) {
   if (!confirm("确定删除这道题吗？")) return;
+  setStatus("正在删除题目...");
   if (dbMode === "cloud") {
     const { error } = await supabaseClient.from("questions").delete().eq("id", id);
-    if (error) alert(`删除失败：${error.message}`);
+    if (error) {
+      alert(`删除失败：${error.message}`);
+      setStatus("删除失败");
+      return;
+    }
+    await fetchCloudQuestions();
+    setStatus("已删除，题库已刷新");
     return;
   }
   questions = questions.filter((item) => item.id !== id);
   persistQuestions();
   renderAll();
+  setStatus("已删除，题库已刷新");
 }
 
 function renderRandomQuestion() {
   if (!questions.length) {
+    currentReviewQuestionId = null;
     els.reviewPanel.innerHTML = `<p class="empty-state">题库里有题后，这里会显示随机题目。</p>`;
     return;
   }
 
-  const question = questions[Math.floor(Math.random() * questions.length)];
+  let pool = questions;
+  if (questions.length > 1 && currentReviewQuestionId) {
+    pool = questions.filter((question) => question.id !== currentReviewQuestionId);
+  }
+
+  const question = pool[Math.floor(Math.random() * pool.length)];
+  currentReviewQuestionId = question.id;
   let selectedChoice = "";
   els.reviewPanel.innerHTML = "";
 
@@ -369,16 +408,16 @@ function renderRandomQuestion() {
 
   const text = document.createElement("p");
   text.className = question.imageData ? "question-index-text" : "review-question";
-  text.textContent = question.imageData ? `AI 识别文字：${question.text}` : question.text;
+  setMathHTML(text, question.imageData ? `AI 识别文字：${question.text}` : question.text);
 
   const options = document.createElement("div");
   options.className = "choice-list";
-  (question.options || []).forEach((option, index) => {
+  shuffleArray([...(question.options || [])]).forEach((option, index) => {
     const button = document.createElement("button");
     button.className = "choice-button";
     const label = option.label || String.fromCharCode(65 + index);
     button.dataset.label = label;
-    button.textContent = `${label}. ${option.text || ""}`;
+    setMathHTML(button, `${label}. ${option.text || ""}`);
     button.addEventListener("click", () => {
       selectedChoice = label;
       options.querySelectorAll(".choice-button").forEach((item) => item.classList.remove("selected"));
@@ -395,6 +434,13 @@ function renderRandomQuestion() {
   confirmButton.className = "primary-button";
   confirmButton.textContent = "确认选择";
   confirmButton.disabled = !(question.options || []).length;
+
+  const nextButton = document.createElement("button");
+  nextButton.className = "secondary-button";
+  nextButton.textContent = "下一题";
+  nextButton.hidden = true;
+  nextButton.addEventListener("click", renderRandomQuestion);
+
   confirmButton.addEventListener("click", () => {
     if (!selectedChoice) {
       result.hidden = false;
@@ -415,6 +461,9 @@ function renderRandomQuestion() {
       result.className = "answer-result";
       result.textContent = `已选择 ${selectedChoice}，这题还没有标准答案。`;
     }
+
+    confirmButton.disabled = true;
+    nextButton.hidden = false;
   });
 
   const reveal = document.createElement("button");
@@ -424,20 +473,25 @@ function renderRandomQuestion() {
   const detail = document.createElement("div");
   detail.className = "answer-block";
   detail.hidden = true;
-  detail.textContent = [
+  setMathHTML(detail, [
     question.correctAnswer ? `正确选项：${question.correctAnswer}` : "",
     question.answer ? `答案/备注：\n${question.answer}` : "",
     question.explanation ? `解析：\n${question.explanation}` : "解析：暂无"
-  ].filter(Boolean).join("\n\n");
+  ].filter(Boolean).join("\n\n"));
 
   reveal.addEventListener("click", () => {
     detail.hidden = !detail.hidden;
     reveal.textContent = detail.hidden ? "显示解析" : "隐藏解析";
   });
 
+  const actionRow = document.createElement("div");
+  actionRow.className = "review-actions";
+  actionRow.append(confirmButton, reveal, nextButton);
+
   els.reviewPanel.append(meta, text);
-  if (options.children.length) els.reviewPanel.append(options, confirmButton, result);
-  els.reviewPanel.append(reveal, detail);
+  if (options.children.length) els.reviewPanel.append(options, result);
+  els.reviewPanel.append(actionRow, detail);
+  renderMath(els.reviewPanel);
 }
 function renderDuplicatePreview() {
   const text = getFormComparableText();
@@ -496,7 +550,52 @@ function fromCloudQuestion(question) { return { id: question.id, course: questio
 function showFormMessage(message) { els.duplicatePreview.hidden = false; els.duplicatePreview.textContent = message; }
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
+function normalizeAnswerContent(answer, correctAnswer, options) {
+  const raw = String(answer || "").trim();
+  const label = String(correctAnswer || "").trim().toUpperCase();
+  const selected = (options || []).find((option) => String(option.label || "").trim().toUpperCase() === label);
+
+  if (!raw && selected) return selected.text || "";
+  if (/^[A-E]$/i.test(raw) && selected) return selected.text || "";
+  if (label && new RegExp(`^(the\\s+)?correct\\s+answer\\s+is\\s+${label}\\.?$`, "i").test(raw) && selected) {
+    return selected.text || "";
+  }
+  if (label && new RegExp(`^正确答案是?\\s*${label}$`, "i").test(raw) && selected) {
+    return selected.text || "";
+  }
+
+  return raw
+    .replace(/^the\s+correct\s+answer\s+is\s+/i, "")
+    .replace(/^正确答案是?\s*/i, "")
+    .trim();
+}
+function shuffleArray(items) {
+  for (let index = items.length - 1; index > 0; index -= 1) {
+    const swapIndex = Math.floor(Math.random() * (index + 1));
+    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
+  }
+  return items;
+}
+function setMathHTML(element, value) {
+  element.innerHTML = escapeHtml(value || "").replace(/\n/g, "<br>");
+}
+
+function renderMath(root = document.body, tries = 0) {
+  if (window.MathJax?.typesetPromise) {
+    window.MathJax.typesetPromise([root]).catch((error) => console.warn("MathJax render failed", error));
+    return;
+  }
+  if (tries < 20) {
+    window.setTimeout(() => renderMath(root, tries + 1), 150);
+  }
+}
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
+
+
+
+
 
 
 
