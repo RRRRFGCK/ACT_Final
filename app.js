@@ -11,7 +11,6 @@ const els = {
   tabs: document.querySelectorAll(".nav-tab"),
   imageInput: document.getElementById("questionImage"),
   previewImage: document.getElementById("previewImage"),
-  ocrButton: document.getElementById("ocrButton"),
   aiExtractButton: document.getElementById("aiExtractButton"),
   ocrStatus: document.getElementById("ocrStatus"),
   courseInput: document.getElementById("courseInput"),
@@ -22,6 +21,7 @@ const els = {
   optionsInput: document.getElementById("optionsInput"),
   correctAnswerInput: document.getElementById("correctAnswerInput"),
   answerInput: document.getElementById("answerInput"),
+  explanationInput: document.getElementById("explanationInput"),
   tagsInput: document.getElementById("tagsInput"),
   duplicatePreview: document.getElementById("duplicatePreview"),
   saveQuestionButton: document.getElementById("saveQuestionButton"),
@@ -44,7 +44,6 @@ const els = {
 
 els.tabs.forEach((tab) => tab.addEventListener("click", () => showView(tab.dataset.view)));
 els.imageInput.addEventListener("change", handleImageChange);
-els.ocrButton.addEventListener("click", runOcr);
 els.aiExtractButton.addEventListener("click", runAiExtract);
 els.saveQuestionButton.addEventListener("click", saveQuestionFromForm);
 els.generateExplanationButton.addEventListener("click", generateExplanationDraft);
@@ -98,28 +97,6 @@ function handleImageChange(event) {
   els.ocrStatus.textContent = "图片已选择，可以开始识别";
 }
 
-async function runOcr() {
-  if (!selectedImage) return setStatus("请先选择一张图片");
-  if (!window.Tesseract) return setStatus("OCR 库没有加载成功，请检查网络后刷新");
-  els.ocrButton.disabled = true;
-  setStatus("正在普通 OCR...");
-  try {
-    const result = await Tesseract.recognize(selectedImage, "eng+chi_sim", {
-      logger: (message) => {
-        if (message.status === "recognizing text") setStatus(`正在普通 OCR ${Math.round(message.progress * 100)}%`);
-      }
-    });
-    els.questionInput.value = result.data.text.trim();
-    setStatus("普通 OCR 完成，建议检查公式和选项");
-    renderDuplicatePreview();
-  } catch (error) {
-    console.error(error);
-    setStatus("普通 OCR 失败，可以试试 AI 精准识别");
-  } finally {
-    els.ocrButton.disabled = false;
-  }
-}
-
 async function runAiExtract() {
   if (!selectedImage) return setStatus("请先选择一张图片");
   if (location.protocol === "file:") return setStatus("AI 识别需要在 Vercel 网址上使用");
@@ -137,7 +114,8 @@ async function runAiExtract() {
     els.questionInput.value = data.question || "";
     els.optionsInput.value = formatOptions(data.options || []);
     els.correctAnswerInput.value = data.correctAnswer || "";
-    els.answerInput.value = data.answer || data.notes || "";
+    els.answerInput.value = data.answer || data.correctAnswer || "";
+    els.explanationInput.value = data.explanation || data.notes || "";
     setStatus("AI 识别完成，建议快速检查一遍");
     renderDuplicatePreview();
   } catch (error) {
@@ -163,7 +141,8 @@ async function saveQuestionFromForm() {
     options: parseOptions(els.optionsInput.value),
     correctAnswer: els.correctAnswerInput.value.trim().toUpperCase(),
     answer: els.answerInput.value.trim(),
-    explanation: existing?.explanation || els.questionInput.dataset.explanationDraft || "",
+    explanation: els.explanationInput.value.trim() || existing?.explanation || els.questionInput.dataset.explanationDraft || "",
+    imageData: selectedImage ? await fileToResizedDataUrl(selectedImage) : existing?.imageData || "",
     tags: parseTags(els.tagsInput.value),
     reviewed: existing?.reviewed || false,
     createdAt: existing?.createdAt || now,
@@ -272,6 +251,13 @@ function renderLibrary() {
 function renderQuestionCard(question) {
   const node = els.template.content.cloneNode(true);
   const card = node.querySelector(".question-card");
+  if (question.imageData) {
+    const image = document.createElement("img");
+    image.className = "card-image";
+    image.src = question.imageData;
+    image.alt = "题目原图";
+    card.prepend(image);
+  }
   const chips = node.querySelector(".chips");
   const title = node.querySelector("h3");
   const text = node.querySelector(".question-text");
@@ -311,6 +297,11 @@ function editQuestion(id) {
   els.optionsInput.value = formatOptions(question.options || []);
   els.correctAnswerInput.value = question.correctAnswer || "";
   els.answerInput.value = question.answer;
+  els.explanationInput.value = question.explanation || "";
+  if (question.imageData) {
+    els.previewImage.src = question.imageData;
+    els.previewImage.hidden = false;
+  }
   els.tagsInput.value = question.tags.join(", ");
   els.saveQuestionButton.textContent = "更新题目";
   renderDuplicatePreview();
@@ -361,8 +352,18 @@ function renderRandomQuestion() {
   text.className = "review-question";
   text.textContent = question.text;
   const options = document.createElement("div");
-  options.className = "answer-block";
-  options.textContent = formatOptions(question.options || []);
+  options.className = "choice-list";
+  (question.options || []).forEach((option, index) => {
+    const button = document.createElement("button");
+    button.className = "choice-button";
+    const label = option.label || String.fromCharCode(65 + index);
+    button.textContent = `${label}. ${option.text || ""}`;
+    button.addEventListener("click", () => {
+      options.querySelectorAll(".choice-button").forEach((item) => item.classList.remove("selected"));
+      button.classList.add("selected");
+    });
+    options.append(button);
+  });
   const reveal = document.createElement("button");
   reveal.className = "primary-button";
   reveal.textContent = "显示答案和解析";
@@ -374,8 +375,15 @@ function renderRandomQuestion() {
     detail.hidden = !detail.hidden;
     reveal.textContent = detail.hidden ? "显示答案和解析" : "隐藏答案和解析";
   });
+  if (question.imageData) {
+    const image = document.createElement("img");
+    image.className = "card-image";
+    image.src = question.imageData;
+    image.alt = "题目原图";
+    els.reviewPanel.append(image);
+  }
   els.reviewPanel.append(meta, text);
-  if (options.textContent) els.reviewPanel.append(options);
+  if (options.children.length) els.reviewPanel.append(options);
   els.reviewPanel.append(reveal, detail);
 }
 
@@ -431,9 +439,14 @@ function parseTags(value) { return value.split(/[,，]/).map((tag) => tag.trim()
 function loadQuestions() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
 function persistQuestions() { localStorage.setItem(STORAGE_KEY, JSON.stringify(questions)); }
 function exportQuestions() { const blob = new Blob([JSON.stringify(questions, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `final-review-question-bank-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); URL.revokeObjectURL(url); }
-function toCloudQuestion(question) { return { course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: question.text, options: question.options || [], correct_answer: question.correctAnswer || "", answer: question.answer, explanation: question.explanation, tags: question.tags, reviewed: question.reviewed, updated_at: question.updatedAt }; }
-function fromCloudQuestion(question) { return { id: question.id, course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: question.text, options: question.options || [], correctAnswer: question.correct_answer || "", answer: question.answer || "", explanation: question.explanation || "", tags: question.tags || [], reviewed: Boolean(question.reviewed), createdAt: question.created_at, updatedAt: question.updated_at }; }
+function toCloudQuestion(question) { return { course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: question.text, image_data: question.imageData || "", options: question.options || [], correct_answer: question.correctAnswer || "", answer: question.answer, explanation: question.explanation, tags: question.tags, reviewed: question.reviewed, updated_at: question.updatedAt }; }
+function fromCloudQuestion(question) { return { id: question.id, course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: question.text, imageData: question.image_data || "", options: question.options || [], correctAnswer: question.correct_answer || "", answer: question.answer || "", explanation: question.explanation || "", tags: question.tags || [], reviewed: Boolean(question.reviewed), createdAt: question.created_at, updatedAt: question.updated_at }; }
 function showFormMessage(message) { els.duplicatePreview.hidden = false; els.duplicatePreview.textContent = message; }
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
+
+
+
