@@ -338,8 +338,19 @@ function renderRandomQuestion() {
     els.reviewPanel.innerHTML = `<p class="empty-state">题库里有题后，这里会显示随机题目。</p>`;
     return;
   }
+
   const question = questions[Math.floor(Math.random() * questions.length)];
+  let selectedChoice = "";
   els.reviewPanel.innerHTML = "";
+
+  if (question.imageData) {
+    const image = document.createElement("img");
+    image.className = "review-image";
+    image.src = question.imageData;
+    image.alt = "题目原图";
+    els.reviewPanel.append(image);
+  }
+
   const meta = document.createElement("div");
   meta.className = "chips";
   [question.course, question.topic, question.type, question.difficulty].forEach((label) => {
@@ -348,45 +359,79 @@ function renderRandomQuestion() {
     chip.textContent = label;
     meta.append(chip);
   });
+
   const text = document.createElement("p");
-  text.className = "review-question";
-  text.textContent = question.text;
+  text.className = question.imageData ? "question-index-text" : "review-question";
+  text.textContent = question.imageData ? `AI 识别文字：${question.text}` : question.text;
+
   const options = document.createElement("div");
   options.className = "choice-list";
   (question.options || []).forEach((option, index) => {
     const button = document.createElement("button");
     button.className = "choice-button";
     const label = option.label || String.fromCharCode(65 + index);
+    button.dataset.label = label;
     button.textContent = `${label}. ${option.text || ""}`;
     button.addEventListener("click", () => {
+      selectedChoice = label;
       options.querySelectorAll(".choice-button").forEach((item) => item.classList.remove("selected"));
       button.classList.add("selected");
     });
     options.append(button);
   });
+
+  const result = document.createElement("div");
+  result.className = "answer-result";
+  result.hidden = true;
+
+  const confirmButton = document.createElement("button");
+  confirmButton.className = "primary-button";
+  confirmButton.textContent = "确认选择";
+  confirmButton.disabled = !(question.options || []).length;
+  confirmButton.addEventListener("click", () => {
+    if (!selectedChoice) {
+      result.hidden = false;
+      result.className = "answer-result";
+      result.textContent = "先选择一个选项。";
+      return;
+    }
+
+    const correct = String(question.correctAnswer || "").trim().toUpperCase();
+    result.hidden = false;
+    if (correct && selectedChoice === correct) {
+      result.className = "answer-result correct";
+      result.textContent = `答对了：${selectedChoice}`;
+    } else if (correct) {
+      result.className = "answer-result wrong";
+      result.textContent = `你选了 ${selectedChoice}，正确答案是 ${correct}`;
+    } else {
+      result.className = "answer-result";
+      result.textContent = `已选择 ${selectedChoice}，这题还没有标准答案。`;
+    }
+  });
+
   const reveal = document.createElement("button");
-  reveal.className = "primary-button";
-  reveal.textContent = "显示答案和解析";
+  reveal.className = "secondary-button";
+  reveal.textContent = "显示解析";
+
   const detail = document.createElement("div");
   detail.className = "answer-block";
   detail.hidden = true;
-  detail.textContent = [question.correctAnswer ? `正确选项：${question.correctAnswer}` : "", question.answer ? `答案/备注：\n${question.answer}` : "", question.explanation ? `解析：\n${question.explanation}` : "解析：暂无"].filter(Boolean).join("\n\n");
+  detail.textContent = [
+    question.correctAnswer ? `正确选项：${question.correctAnswer}` : "",
+    question.answer ? `答案/备注：\n${question.answer}` : "",
+    question.explanation ? `解析：\n${question.explanation}` : "解析：暂无"
+  ].filter(Boolean).join("\n\n");
+
   reveal.addEventListener("click", () => {
     detail.hidden = !detail.hidden;
-    reveal.textContent = detail.hidden ? "显示答案和解析" : "隐藏答案和解析";
+    reveal.textContent = detail.hidden ? "显示解析" : "隐藏解析";
   });
-  if (question.imageData) {
-    const image = document.createElement("img");
-    image.className = "card-image";
-    image.src = question.imageData;
-    image.alt = "题目原图";
-    els.reviewPanel.append(image);
-  }
+
   els.reviewPanel.append(meta, text);
-  if (options.children.length) els.reviewPanel.append(options);
+  if (options.children.length) els.reviewPanel.append(options, confirmButton, result);
   els.reviewPanel.append(reveal, detail);
 }
-
 function renderDuplicatePreview() {
   const text = getFormComparableText();
   if (!text.trim()) {
@@ -445,6 +490,7 @@ function showFormMessage(message) { els.duplicatePreview.hidden = false; els.dup
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 

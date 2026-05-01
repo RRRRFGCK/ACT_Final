@@ -51,7 +51,7 @@
               <img id="previewImage" class="preview-image" alt="题目预览" hidden />
               <div class="ocr-row">
                 <button class="primary-button" id="aiExtractButton">AI 精准识别</button>
-                <button class="secondary-button" id="ocrButton">普通 OCR</button>
+                
                 <span id="ocrStatus">等待上传图片</span>
               </div>
             </section>
@@ -65,7 +65,7 @@
               </div>
 
               <label>题目内容<textarea id="questionInput" rows="8" placeholder="AI/OCR 结果会出现在这里，也可以直接粘贴题目。"></textarea></label>
-              <label>选项<textarea id="optionsInput" rows="5" placeholder="每行一个选项，例如：A. 2.25 × 10^{-6}"></textarea></label>
+              <label>选项<textarea id="optionsInput" rows="5" placeholder="AI 会把 A/B/C/D/E 单独提取到这里，每行一个选项。"></textarea></label>
 
               <div class="form-grid">
                 <label>正确选项<input id="correctAnswerInput" type="text" placeholder="例如 C" /></label>
@@ -131,12 +131,12 @@
         <div class="explanation-block"></div>
       </article>
     </template>
-
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@5/dist/tesseract.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
     <script src="./config.js"></script>
     <script src="./app.js"></script>
   </body>
 </html>
+
+
 
 

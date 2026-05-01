@@ -155,3 +155,16 @@ OPENAI_API_KEY=你的 OpenAI API key
 ### 3. 重新部署
 
 把本地代码推送到 GitHub 后，Vercel 会自动重新部署。部署完成后，打开线上网址，上传图片并点击 `AI 精准识别`。
+
+## 保留原图并保存 AI 识别结果
+
+如果你想在题库中保留题目截图，同时保存 AI 识别出的选项、答案和解析，在 Supabase SQL Editor 再运行：
+
+```sql
+alter table public.questions
+add column if not exists image_data text default '',
+add column if not exists options jsonb default '[]'::jsonb,
+add column if not exists correct_answer text default '';
+```
+
+`image_data` 会保存压缩后的图片 data URL。小组复习题量不大时够用；如果以后图片很多，再迁移到 Supabase Storage。
