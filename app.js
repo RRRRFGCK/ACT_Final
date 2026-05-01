@@ -109,7 +109,14 @@ async function runAiExtract() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ imageDataUrl })
     });
-    const data = await response.json();
+    const raw = await response.text();
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch {
+      const shortText = raw.replace(/\s+/g, " ").slice(0, 120);
+      throw new Error(`AI 接口没有返回 JSON。可能是 /api/extract-question 没部署成功。返回内容：${shortText}`);
+    }
     if (!response.ok) throw new Error(data.error || "AI 识别失败");
     els.questionInput.value = data.question || "";
     els.optionsInput.value = formatOptions(data.options || []);
@@ -490,6 +497,7 @@ function showFormMessage(message) { els.duplicatePreview.hidden = false; els.dup
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 
