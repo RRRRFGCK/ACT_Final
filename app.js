@@ -592,7 +592,7 @@ function showFormMessage(message) { els.duplicatePreview.hidden = false; els.dup
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function confirmDuplicateQuestion(candidate) {
-  const matches = findSimilarQuestions(getQuestionComparableText(candidate), editingId).filter((match) => match.score >= 0.7).slice(0, 3);
+  const matches = findSimilarQuestions(getQuestionComparableText(candidate), editingId).filter((match) => match.score >= 0.5).slice(0, 3);
   if (!matches.length) return Promise.resolve(true);
 
   return new Promise((resolve) => {
@@ -605,7 +605,7 @@ function confirmDuplicateQuestion(candidate) {
         <p>系统发现这道题和已有题目很像，相似度 ${Math.round(best.score * 100)}%。请确认是否继续保存。</p>
         <div class="duplicate-modal-match">
           <strong>${escapeHtml(best.question.course)} / ${escapeHtml(best.question.topic)}</strong>
-          <p>${escapeHtml(best.question.text).slice(0, 500)}</p>
+          ${best.question.imageData ? `<img class="duplicate-modal-image" src="${best.question.imageData}" alt="已有题目原图">` : `<p>${escapeHtml(best.question.text).slice(0, 500)}</p>`}
         </div>
         <div class="duplicate-modal-actions">
           <button class="secondary-button duplicate-cancel" type="button">这是重复题，不保存</button>
@@ -700,6 +700,8 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
 
 
 
