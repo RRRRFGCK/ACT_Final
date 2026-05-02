@@ -199,6 +199,14 @@ async function saveQuestionFromForm() {
       updatedAt: now
     };
 
+    if (!wasEditing) {
+      const shouldContinue = await confirmDuplicateQuestion(question);
+      if (!shouldContinue) {
+        setStatus("已取消保存：疑似重复题");
+        return;
+      }
+    }
+
     if (dbMode === "cloud") {
       await saveCloudQuestion(question);
       await fetchCloudQuestions();
@@ -293,7 +301,8 @@ function renderCourseFilter() {
 }
 
 function renderLibrary() {
-  const query = normalizeText(els.searchInput.value);
+  const rawQuery = els.searchInput.value.trim();
+  const query = normalizeText(rawQuery);
   const course = els.courseFilter.value;
   const status = els.statusFilter.value;
   const filtered = questions.filter((question) => {
@@ -305,14 +314,13 @@ function renderLibrary() {
   });
   els.questionList.innerHTML = "";
   if (!filtered.length) {
-    els.questionList.innerHTML = `<p class="empty-state">还没有符合条件的题目。</p>`;
+    els.questionList.innerHTML = `<p class="empty-state">没有找到匹配关键词的题目。</p>`;
     return;
   }
-  filtered.forEach((question) => els.questionList.append(renderQuestionCard(question)));
+  filtered.forEach((question) => els.questionList.append(renderQuestionCard(question, rawQuery)));
   renderMath(els.questionList);
 }
-
-function renderQuestionCard(question) {
+function renderQuestionCard(question, highlight = "") {
   const node = els.template.content.cloneNode(true);
   const card = node.querySelector(".question-card");
   if (question.imageData) {
@@ -335,14 +343,14 @@ function renderQuestionCard(question) {
     chips.append(chip);
   });
   title.textContent = question.reviewed ? "已复习" : "待复习";
-  setMathHTML(text, question.text);
+  setMathHTML(text, question.text, highlight);
   const optionText = formatOptions(question.options || []);
   setMathHTML(answer, [
     optionText ? `选项：\n${optionText}` : "",
     question.correctAnswer ? `正确选项：${question.correctAnswer}` : "",
     question.answer ? `答案/备注：\n${question.answer}` : ""
-  ].filter(Boolean).join("\n\n"));
-  setMathHTML(explanation, question.explanation ? `解析：\n${question.explanation}` : "");
+  ].filter(Boolean).join("\n\n"), highlight);
+  setMathHTML(explanation, question.explanation ? `解析：\n${question.explanation}` : "", highlight);
   node.querySelector(".edit-button").addEventListener("click", () => editQuestion(question.id));
   node.querySelector(".reviewed-button").addEventListener("click", () => toggleReviewed(question.id));
   node.querySelector(".delete-button").addEventListener("click", () => deleteQuestion(question.id));
@@ -583,6 +591,39 @@ function fromCloudQuestion(question) { return { id: question.id, course: questio
 function showFormMessage(message) { els.duplicatePreview.hidden = false; els.duplicatePreview.textContent = message; }
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
+function confirmDuplicateQuestion(candidate) {
+  const matches = findSimilarQuestions(getQuestionComparableText(candidate), editingId).filter((match) => match.score >= 0.7).slice(0, 3);
+  if (!matches.length) return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    const overlay = document.createElement("div");
+    overlay.className = "duplicate-modal-backdrop";
+    const best = matches[0];
+    overlay.innerHTML = `
+      <section class="duplicate-modal" role="dialog" aria-modal="true" aria-label="疑似重复题确认">
+        <h2>可能是重复题</h2>
+        <p>系统发现这道题和已有题目很像，相似度 ${Math.round(best.score * 100)}%。请确认是否继续保存。</p>
+        <div class="duplicate-modal-match">
+          <strong>${escapeHtml(best.question.course)} / ${escapeHtml(best.question.topic)}</strong>
+          <p>${escapeHtml(best.question.text).slice(0, 500)}</p>
+        </div>
+        <div class="duplicate-modal-actions">
+          <button class="secondary-button duplicate-cancel" type="button">这是重复题，不保存</button>
+          <button class="primary-button duplicate-continue" type="button">不是重复题，继续保存</button>
+        </div>
+      </section>
+    `;
+    document.body.append(overlay);
+    overlay.querySelector(".duplicate-cancel").addEventListener("click", () => {
+      overlay.remove();
+      resolve(false);
+    });
+    overlay.querySelector(".duplicate-continue").addEventListener("click", () => {
+      overlay.remove();
+      resolve(true);
+    });
+  });
+}
 function normalizeAnswerContent(answer, correctAnswer, options) {
   const raw = String(answer || "").trim();
   const label = String(correctAnswer || "").trim().toUpperCase();
@@ -609,10 +650,34 @@ function shuffleArray(items) {
   }
   return items;
 }
-function setMathHTML(element, value) {
-  element.innerHTML = escapeHtml(wrapBareLatex(value || "")).replace(/\n/g, "<br>");
+function setMathHTML(element, value, highlight = "") {
+  const prepared = wrapBareLatex(value || "");
+  const escaped = escapeHtml(prepared).replace(/\n/g, "<br>");
+  element.innerHTML = highlightEscapedHTML(escaped, highlight);
 }
 
+function highlightEscapedHTML(html, highlight) {
+  const terms = String(highlight || "")
+    .trim()
+    .split(/\s+/)
+    .map((term) => term.trim())
+    .filter(Boolean)
+    .map(escapeRegExp);
+
+  if (!terms.length) return html;
+  const pattern = new RegExp(`(${terms.join("|")})`, "gi");
+  return html
+    .split(/(\$[^$]*\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])/g)
+    .map((part) => {
+      if (/^(\$[^$]*\$|\\\([\s\S]*?\\\)|\\\[[\s\S]*?\\\])$/.test(part)) return part;
+      return part.replace(pattern, `<mark class="search-hit">$1</mark>`);
+    })
+    .join("");
+}
+
+function escapeRegExp(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
 function wrapBareLatex(value) {
   return String(value)
     .split("\n")
@@ -635,6 +700,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 
