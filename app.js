@@ -66,7 +66,8 @@ els.exportButton.addEventListener("click", exportQuestions);
 els.randomQuestionButton.addEventListener("click", renderRandomQuestion);
 els.scanDuplicatesButton.addEventListener("click", renderDuplicates);
 els.questionInput.addEventListener("input", renderDuplicatePreview);
-els.optionsInput.addEventListener("input", renderDuplicatePreview);
+// Duplicate detection intentionally follows the stem only; options/answers can vary by source.
+
 
 renderAll();
 initCloudMode();
@@ -569,7 +570,7 @@ function renderRandomQuestion() {
   renderMath(els.reviewPanel);
 }
 function renderDuplicatePreview() {
-  const text = getFormComparableText();
+  const text = getFormQuestionStemText();
   if (!text.trim()) {
     els.duplicatePreview.hidden = true;
     return;
@@ -587,7 +588,7 @@ function renderDuplicates() {
   const pairs = [];
   for (let i = 0; i < questions.length; i += 1) {
     for (let j = i + 1; j < questions.length; j += 1) {
-      const score = similarity(getQuestionComparableText(questions[i]), getQuestionComparableText(questions[j]));
+      const score = similarity(getQuestionStemText(questions[i]), getQuestionStemText(questions[j]));
       if (score >= 0.5) pairs.push({ first: questions[i], second: questions[j], score });
     }
   }
@@ -610,13 +611,14 @@ function findSimilarQuestions(text, excludeId, threshold = 0.5) {
     .filter((question) => question.id !== excludeId)
     .map((question) => ({
       question,
-      score: similarity(text, getQuestionComparableText(question)),
+      score: similarity(text, getQuestionStemText(question)),
     }))
     .filter((match) => match.score >= threshold)
     .sort((a, b) => b.score - a.score);
 }
 
-function getFormComparableText() { return `${els.questionInput.value}\n${els.optionsInput.value}`; }
+function getFormQuestionStemText() { return els.questionInput.value; }
+function getQuestionStemText(question) { return question.text || ""; }
 function getQuestionComparableText(question) { return [question.course, question.topic, question.text, formatOptions(question.options || []), question.answer, question.explanation, question.tags.join(" ")].join("\n"); }
 function generateTrigrams(text) { const normalized = normalizeText(text); if (normalized.length <= 3) return new Set([normalized]); const grams = new Set(); for (let index = 0; index <= normalized.length - 3; index += 1) grams.add(normalized.slice(index, index + 3)); return grams; }
 function similarity(a, b) { const first = generateTrigrams(a); const second = generateTrigrams(b); const intersection = [...first].filter((gram) => second.has(gram)).length; const union = new Set([...first, ...second]).size; return union ? intersection / union : 0; }
@@ -633,7 +635,7 @@ function showFormMessage(message) { els.duplicatePreview.hidden = false; els.dup
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function confirmDuplicateQuestion(candidate) {
-  const matches = findSimilarQuestions(getQuestionComparableText(candidate), editingId, 0.5).slice(0, 3);
+  const matches = findSimilarQuestions(getQuestionStemText(candidate), editingId, 0.5).slice(0, 3);
   if (!matches.length) return Promise.resolve(true);
 
   return new Promise((resolve) => {
@@ -771,6 +773,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 
