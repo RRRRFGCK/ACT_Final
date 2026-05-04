@@ -26,15 +26,17 @@ module.exports = async function handler(request, response) {
     const solveModelUsed = getSolveModel();
     const extracted = await extractQuestionFromImage(apiKey, imageDataUrl, extractModelUsed);
     const relevantChunks = findRelevantMaterialChunks(extracted, 5);
-    const enriched = relevantChunks.length
-      ? await enrichWithLectureContext(apiKey, extracted, relevantChunks, solveModelUsed)
-      : extracted;
+    const located = relevantChunks.length
+      ? await locateLectureContext(apiKey, extracted, relevantChunks, extractModelUsed)
+      : {};
+    const solved = await solveWithLectureContext(apiKey, extracted, relevantChunks, located, solveModelUsed);
 
     response.status(200).json({
       ...extracted,
-      ...enriched,
-      sourceRefs: enriched.sourceRefs || relevantChunks.map((chunk) => chunk.ref),
-      modelUsed: `提取 ${extractModelUsed} / 解析 ${solveModelUsed}`,
+      ...located,
+      ...solved,
+      sourceRefs: located.sourceRefs || solved.sourceRefs || relevantChunks.map((chunk) => chunk.ref),
+      modelUsed: `extract+chapter ${extractModelUsed} / answer+explanation ${solveModelUsed}`,
       extractModelUsed,
       solveModelUsed,
       matchedMaterials: relevantChunks.map((chunk) => ({
@@ -73,10 +75,8 @@ async function extractQuestionFromImage(apiKey, imageDataUrl, modelUsed) {
               "Extract every visible option as a separate options array item. Preserve mathematical notation carefully.",
               "Use LaTeX for exponents, matrices, subscripts, Greek letters, probabilities, and equations. Wrap every mathematical expression in $...$ so it can be rendered by MathJax, for example $\\sqrt{4^2 + 1.5^2} = 4.272$.",
               "Keep option labels as A, B, C, D, E when present.",
-              "If a visible tick, x mark, bracket, highlight, or handwritten mark clearly indicates an answer, put that label in correctAnswer.",
-              "If no answer is visibly marked, solve the question and put the best option label in correctAnswer.",
-              "Put only the final answer value/content in answer, not a sentence and not the option label. For example, use \"60.625\" or \"6.25 \\times 10^{-6}\", not \"The correct answer is B\" and not \"B\".",
-              "Write a concise Chinese explanation in explanation, including the key formula and steps. The explanation may mention the option label, but answer must not.",
+              "If a visible tick, x mark, bracket, highlight, or handwritten mark clearly indicates an answer, put that label in correctAnswer; otherwise leave correctAnswer empty.",
+              "Do not solve the question in this step. Leave answer and explanation empty unless they are explicitly visible in the image.",
               "Still prioritize accurate transcription of the visible question and options."
             ].join(" ")
           },
@@ -93,7 +93,40 @@ async function extractQuestionFromImage(apiKey, imageDataUrl, modelUsed) {
   return parseJsonOutput(extractOutputText(openaiResponse));
 }
 
-async function enrichWithLectureContext(apiKey, extracted, chunks, modelUsed = getSolveModel()) {
+async function locateLectureContext(apiKey, extracted, chunks, modelUsed = getExtractModel()) {
+  const context = chunks.map((chunk, index) => [
+    `[${index + 1}] ${chunk.ref}`,
+    chunk.content
+  ].join("\n")).join("\n\n---\n\n");
+
+  const response = await callOpenAI(apiKey, {
+    model: modelUsed,
+    input: [
+      {
+        role: "user",
+        content: [
+          {
+            type: "input_text",
+            text: [
+              "Locate this Imperial CSP Advanced Communication Theory question in the lecture context.",
+              "Do not solve the question and do not generate an explanation.",
+              "Return only valid JSON with this schema:",
+              "{\"chapter\": string, \"knowledgePoint\": string, \"sourceRefs\": string[]}",
+              "Question JSON:",
+              JSON.stringify(extracted),
+              "Lecture context:",
+              context
+            ].join("\n")
+          }
+        ]
+      }
+    ]
+  });
+
+  return parseJsonOutput(extractOutputText(response));
+}
+
+async function solveWithLectureContext(apiKey, extracted, chunks, located, modelUsed = getSolveModel()) {
   const context = chunks.map((chunk, index) => [
     `[${index + 1}] ${chunk.ref}`,
     chunk.content
@@ -109,15 +142,18 @@ async function enrichWithLectureContext(apiKey, extracted, chunks, modelUsed = g
             type: "input_text",
             text: [
               "You are helping with Imperial CSP Advanced Communication Theory revision.",
-              "Use the provided lecture context to refine the answer and explanation for this multiple-choice question.",
+              "Only this step should solve the question and write the explanation.",
+              "Use the provided lecture location and context when helpful.",
               "Return only valid JSON with this schema:",
-              "{\"correctAnswer\": string, \"answer\": string, \"chapter\": string, \"knowledgePoint\": string, \"sourceRefs\": string[], \"explanation\": string}",
+              "{\"correctAnswer\": string, \"answer\": string, \"explanation\": string}",
               "The answer field must contain only the final answer value/content, not the option label and not a sentence like 'correct answer is B'.",
               "The explanation must be in Chinese and start with a short source line like: 课件定位：ACT_2 Diversity Theory, page 12；知识点：...",
               "Use MathJax-ready LaTeX with $...$ around math.",
               "If the lecture context is not enough, say 基于课件相关页和题目推导 in the explanation, but still answer if possible.",
               "Question JSON:",
               JSON.stringify(extracted),
+              "Lecture location JSON:",
+              JSON.stringify(located || {}),
               "Lecture context:",
               context
             ].join("\n")
@@ -227,6 +263,8 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 }
+
+
 
 
 
