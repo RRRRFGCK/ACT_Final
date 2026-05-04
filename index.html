@@ -100,10 +100,14 @@
 
         <section class="view" id="reviewView">
           <div class="page-heading">
-            <div><h2>选择题练习</h2><p>看原图，点击选项，确认后查看答案和解析。</p></div>
-            <button class="primary-button" id="randomQuestionButton">随机一题</button>
+            <div><h2>选择题练习</h2><p>选择课程和章节后专项刷题，选项会随机打乱。</p></div>
+            <button class="primary-button" id="randomQuestionButton">开始 / 下一题</button>
           </div>
-          <section class="panel review-panel" id="reviewPanel"><p class="empty-state">题库里有题后，这里会显示随机题目。</p></section>
+          <div class="filters review-filters">
+            <select id="reviewCourseFilter"><option value="">全部课程</option></select>
+            <select id="reviewTopicFilter"><option value="">全部章节</option></select>
+          </div>
+          <section class="panel review-panel" id="reviewPanel"><p class="empty-state">选择章节后点击开始，或直接从全部题目中随机练习。</p></section>
         </section>
 
         <section class="view" id="duplicatesView">
@@ -147,6 +151,7 @@
     <script src="./app.js"></script>
   </body>
 </html>
+
 
 
 

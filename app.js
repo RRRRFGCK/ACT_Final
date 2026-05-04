@@ -6,6 +6,7 @@ let selectedImage = null;
 let dbMode = "local";
 let supabaseClient = null;
 let currentReviewQuestionId = null;
+const reviewHistoryByScope = new Map();
 
 const els = {
   views: document.querySelectorAll(".view"),
@@ -36,6 +37,8 @@ const els = {
   exportButton: document.getElementById("exportButton"),
   reviewPanel: document.getElementById("reviewPanel"),
   randomQuestionButton: document.getElementById("randomQuestionButton"),
+  reviewCourseFilter: document.getElementById("reviewCourseFilter"),
+  reviewTopicFilter: document.getElementById("reviewTopicFilter"),
   duplicateList: document.getElementById("duplicateList"),
   scanDuplicatesButton: document.getElementById("scanDuplicatesButton"),
   statTotal: document.getElementById("statTotal"),
@@ -64,6 +67,15 @@ els.topicFilter?.addEventListener("change", renderLibrary);
 els.statusFilter.addEventListener("change", renderLibrary);
 els.exportButton.addEventListener("click", exportQuestions);
 els.randomQuestionButton.addEventListener("click", renderRandomQuestion);
+els.reviewCourseFilter?.addEventListener("change", () => {
+  resetReviewMemory();
+  renderReviewTopicFilter();
+  renderRandomQuestion();
+});
+els.reviewTopicFilter?.addEventListener("change", () => {
+  resetReviewMemory();
+  renderRandomQuestion();
+});
 els.scanDuplicatesButton.addEventListener("click", renderDuplicates);
 els.questionInput.addEventListener("input", renderDuplicatePreview);
 // Duplicate detection intentionally follows the stem only; options/answers can vary by source.
@@ -292,6 +304,8 @@ function renderAll() {
   renderStats();
   renderCourseFilter();
   renderTopicFilter();
+  renderReviewCourseFilter();
+  renderReviewTopicFilter();
   renderLibrary();
   renderDuplicates();
 }
@@ -331,6 +345,80 @@ function renderTopicFilter() {
     els.topicFilter.append(option);
   });
   els.topicFilter.value = topics.includes(current) ? current : "";
+}
+
+function renderReviewCourseFilter() {
+  if (!els.reviewCourseFilter) return;
+  const current = els.reviewCourseFilter.value;
+  const courses = [...new Set(questions.map((question) => question.course).filter(Boolean))].sort();
+  els.reviewCourseFilter.innerHTML = `<option value="">全部课程</option>`;
+  courses.forEach((course) => {
+    const option = document.createElement("option");
+    option.value = course;
+    option.textContent = course;
+    els.reviewCourseFilter.append(option);
+  });
+  els.reviewCourseFilter.value = courses.includes(current) ? current : "";
+}
+
+function renderReviewTopicFilter() {
+  if (!els.reviewTopicFilter) return;
+  const current = els.reviewTopicFilter.value;
+  const course = els.reviewCourseFilter?.value || "";
+  const topics = [...new Set(questions
+    .filter((question) => !course || question.course === course)
+    .map((question) => question.topic)
+    .filter(Boolean))].sort();
+  els.reviewTopicFilter.innerHTML = `<option value="">全部章节</option>`;
+  topics.forEach((topic) => {
+    const option = document.createElement("option");
+    option.value = topic;
+    option.textContent = topic;
+    els.reviewTopicFilter.append(option);
+  });
+  els.reviewTopicFilter.value = topics.includes(current) ? current : "";
+}
+
+function getReviewFilterKey() {
+  const course = els.reviewCourseFilter?.value || "";
+  const topic = els.reviewTopicFilter?.value || "";
+  return `${course}::${topic}`;
+}
+
+function resetReviewMemory() {
+  currentReviewQuestionId = null;
+  reviewHistoryKey = getReviewFilterKey();
+  reviewRecentIds = [];
+}
+
+function getReviewScope() {
+  return {
+    course: els.reviewCourseFilter?.value || "",
+    topic: els.reviewTopicFilter?.value || ""
+  };
+}
+
+function getReviewScopeKey(scope = getReviewScope()) {
+  return `${scope.course || "*"}::${scope.topic || "*"}`;
+}
+
+function getReviewQuestionPool(scope = getReviewScope()) {
+  return questions.filter((question) => {
+    const matchesCourse = !scope.course || question.course === scope.course;
+    const matchesTopic = !scope.topic || question.topic === scope.topic;
+    return matchesCourse && matchesTopic;
+  });
+}
+
+function pickReviewQuestion(available, scopeKey) {
+  const rememberedLimit = Math.max(1, Math.min(8, Math.ceil(available.length * 0.6)));
+  const history = (reviewHistoryByScope.get(scopeKey) || []).filter((id) => available.some((question) => question.id === id));
+  let pool = available.filter((question) => !history.includes(question.id));
+  if (!pool.length) pool = available;
+  const question = pool[Math.floor(Math.random() * pool.length)];
+  const nextHistory = [question.id, ...history.filter((id) => id !== question.id)].slice(0, rememberedLimit);
+  reviewHistoryByScope.set(scopeKey, nextHistory);
+  return question;
 }
 
 function renderLibrary() {
@@ -449,19 +537,40 @@ async function deleteQuestion(id) {
 }
 
 function renderRandomQuestion() {
+  const scope = getReviewScope();
+  const scopeKey = getReviewScopeKey(scope);
+  const available = getReviewQuestionPool(scope);
   if (!questions.length) {
     currentReviewQuestionId = null;
     els.reviewPanel.innerHTML = `<p class="empty-state">题库里有题后，这里会显示随机题目。</p>`;
     return;
   }
-
-  let pool = questions;
-  if (questions.length > 1 && currentReviewQuestionId) {
-    pool = questions.filter((question) => question.id !== currentReviewQuestionId);
+  if (!available.length) {
+    currentReviewQuestionId = null;
+    els.reviewPanel.innerHTML = `<p class="empty-state">当前课程/章节下面还没有题目，换一个章节试试。</p>`;
+    return;
   }
+
+  const nextKey = getReviewFilterKey();
+  if (reviewHistoryKey !== nextKey) {
+    resetReviewMemory();
+    reviewHistoryKey = nextKey;
+  }
+
+  const availableIds = new Set(available.map((question) => question.id));
+  reviewRecentIds = reviewRecentIds.filter((id) => availableIds.has(id));
+  const maxMemory = Math.max(1, Math.min(available.length - 1, Math.floor(available.length * 0.7)));
+  let pool = available.filter((question) => !reviewRecentIds.includes(question.id));
+  if (!pool.length) {
+    reviewRecentIds = currentReviewQuestionId ? [currentReviewQuestionId] : [];
+    pool = available.filter((question) => question.id !== currentReviewQuestionId);
+  }
+  if (!pool.length) pool = available;
 
   const question = pool[Math.floor(Math.random() * pool.length)];
   currentReviewQuestionId = question.id;
+  reviewRecentIds.push(question.id);
+  reviewRecentIds = reviewRecentIds.slice(-maxMemory);
   let selectedChoice = "";
   els.reviewPanel.innerHTML = "";
 
@@ -773,6 +882,10 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
+
+
 
 
 
