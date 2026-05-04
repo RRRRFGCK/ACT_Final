@@ -130,8 +130,10 @@ small {
 }
 
 main {
+  min-width: 0;
   height: 100vh;
   padding: 32px;
+  overflow-x: hidden;
   overflow-y: auto;
 }
 
@@ -141,6 +143,7 @@ main {
 
 .view.active {
   display: block;
+  min-width: 0;
 }
 
 .page-heading {
@@ -323,11 +326,17 @@ textarea:focus {
 .question-list,
 .duplicate-list {
   display: grid;
+  min-width: 0;
+  max-width: 100%;
   gap: 14px;
 }
 
 .question-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   padding: 18px;
+  overflow: hidden;
 }
 
 .card-topline {
@@ -354,20 +363,42 @@ textarea:focus {
   font-size: 18px;
 }
 
-.question-text {
+.question-text,
+.question-index-text {
+  max-width: 100%;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: pre-wrap;
   color: #2d363e;
 }
 
 .answer-block,
 .explanation-block {
+  max-width: 100%;
   margin-top: 12px;
   padding: 12px;
+  overflow-x: auto;
   border-radius: 8px;
   background: #f7f9fb;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   white-space: pre-wrap;
 }
 
+
+.question-card mjx-container,
+.review-panel mjx-container,
+.choice-button mjx-container {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.question-card svg,
+.review-panel svg,
+.choice-button svg {
+  max-width: 100%;
+}
 .answer-block:empty,
 .explanation-block:empty {
   display: none;
@@ -455,7 +486,7 @@ textarea:focus {
 
 .card-image {
   display: block;
-  width: min(760px, 100%);
+  width: 760px;
   max-width: 100%;
   max-height: 420px;
   margin: 0 auto 14px;
@@ -490,7 +521,7 @@ textarea:focus {
 
 .review-image {
   display: block;
-  width: min(760px, 100%);
+  width: 760px;
   max-width: 100%;
   max-height: 620px;
   margin: 0 auto 16px;
@@ -616,5 +647,6 @@ textarea:focus {
   background: #fff;
   object-fit: contain;
 }
+
 
 
