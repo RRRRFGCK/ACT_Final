@@ -454,9 +454,11 @@ textarea:focus {
 }
 
 .card-image {
-  width: 100%;
+  display: block;
+  width: min(760px, 100%);
+  max-width: 100%;
   max-height: 420px;
-  margin-bottom: 14px;
+  margin: 0 auto 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #f7f9fb;
@@ -487,9 +489,11 @@ textarea:focus {
 }
 
 .review-image {
-  width: 100%;
+  display: block;
+  width: min(760px, 100%);
+  max-width: 100%;
   max-height: 620px;
-  margin-bottom: 16px;
+  margin: 0 auto 16px;
   border: 1px solid var(--line);
   border-radius: 8px;
   background: #fff;
@@ -612,4 +616,5 @@ textarea:focus {
   background: #fff;
   object-fit: contain;
 }
+
 
