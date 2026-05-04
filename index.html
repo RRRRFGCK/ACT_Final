@@ -45,10 +45,10 @@
             <section class="panel upload-panel">
               <label class="drop-zone" for="questionImage">
                 <input id="questionImage" type="file" accept="image/*" />
+                <img id="previewImage" class="preview-image" alt="题目预览" hidden />
                 <span class="drop-title">粘贴、拖拽或选择图片</span>
                 <span class="drop-subtitle">复制截图后按 Ctrl+V，或把图片拖到这里，也可以点击选择文件。</span>
               </label>
-              <img id="previewImage" class="preview-image" alt="题目预览" hidden />
               <div class="ocr-row">
                 <button class="primary-button" id="aiExtractButton">AI 精准识别</button>
                 
@@ -92,6 +92,7 @@
           <div class="filters">
             <input id="searchInput" type="search" placeholder="搜索题干、选项、课程、章节、标签" />
             <select id="courseFilter"><option value="">全部课程</option></select>
+            <select id="topicFilter"><option value="">全部章节</option></select>
             <select id="statusFilter"><option value="">全部状态</option><option value="explained">有解析</option><option value="todo">待解析</option><option value="reviewed">已复习</option></select>
           </div>
           <div class="question-list" id="questionList"></div>
@@ -146,6 +147,7 @@
     <script src="./app.js"></script>
   </body>
 </html>
+
 
 
 

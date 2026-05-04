@@ -31,6 +31,7 @@ const els = {
   questionList: document.getElementById("questionList"),
   searchInput: document.getElementById("searchInput"),
   courseFilter: document.getElementById("courseFilter"),
+  topicFilter: document.getElementById("topicFilter"),
   statusFilter: document.getElementById("statusFilter"),
   exportButton: document.getElementById("exportButton"),
   reviewPanel: document.getElementById("reviewPanel"),
@@ -55,7 +56,11 @@ els.saveQuestionButton.addEventListener("click", saveQuestionFromForm);
 els.generateExplanationButton.addEventListener("click", generateExplanationDraft);
 els.clearFormButton.addEventListener("click", resetForm);
 els.searchInput.addEventListener("input", renderLibrary);
-els.courseFilter.addEventListener("change", renderLibrary);
+els.courseFilter.addEventListener("change", () => {
+  renderTopicFilter();
+  renderLibrary();
+});
+els.topicFilter?.addEventListener("change", renderLibrary);
 els.statusFilter.addEventListener("change", renderLibrary);
 els.exportButton.addEventListener("click", exportQuestions);
 els.randomQuestionButton.addEventListener("click", renderRandomQuestion);
@@ -108,6 +113,7 @@ function setSelectedImage(file, sourceLabel = "图片") {
   selectedImage = file;
   els.previewImage.src = URL.createObjectURL(file);
   els.previewImage.hidden = false;
+  dropZone?.classList.add("has-image");
   setStatus(`${sourceLabel}已选择，可以开始 AI 识别`);
 }
 
@@ -205,7 +211,8 @@ async function saveQuestionFromForm() {
     if (!wasEditing) {
       const shouldContinue = await confirmDuplicateQuestion(question);
       if (!shouldContinue) {
-        setStatus("已取消保存：疑似重复题");
+        resetForm({ keepStatus: true });
+        setStatus("已取消保存：疑似重复题，表单已清空");
         return;
       }
     }
@@ -222,14 +229,14 @@ async function saveQuestionFromForm() {
     resetForm();
     renderAll();
     showView("library");
-    setStatus(wasEditing ? "已更新，题库已刷新" : "已保存，题库已刷新");
+    setStatus(wasEditing ? "已更新，题库已刷新，表单已清空" : "已保存，题库已刷新，表单已清空");
   } catch (error) {
     console.error(error);
     showFormMessage(error.message || "保存失败，请稍后再试。");
     setStatus("保存失败");
   } finally {
     els.saveQuestionButton.disabled = false;
-    els.saveQuestionButton.textContent = wasEditing ? "更新题目" : "保存题目";
+    els.saveQuestionButton.textContent = editingId ? "更新题目" : "保存题目";
   }
 }
 async function saveCloudQuestion(question) {
@@ -256,13 +263,14 @@ function generateExplanationDraft() {
   showFormMessage("已生成解析草稿，并尝试复制到剪贴板。");
 }
 
-function resetForm() {
+function resetForm(options = {}) {
   editingId = null;
   selectedImage = null;
   els.imageInput.value = "";
   els.previewImage.hidden = true;
   els.previewImage.removeAttribute("src");
-  setStatus(dbMode === "cloud" ? "已连接云端题库" : "等待上传图片");
+  dropZone?.classList.remove("has-image", "drag-over");
+  if (!options.keepStatus) setStatus(dbMode === "cloud" ? "已连接云端题库" : "等待上传图片");
   els.courseInput.value = "";
   els.topicInput.value = "";
   els.typeInput.value = "选择题";
@@ -280,6 +288,7 @@ function resetForm() {
 function renderAll() {
   renderStats();
   renderCourseFilter();
+  renderTopicFilter();
   renderLibrary();
   renderDuplicates();
 }
@@ -292,7 +301,7 @@ function renderStats() {
 
 function renderCourseFilter() {
   const current = els.courseFilter.value;
-  const courses = [...new Set(questions.map((question) => question.course))].sort();
+  const courses = [...new Set(questions.map((question) => question.course).filter(Boolean))].sort();
   els.courseFilter.innerHTML = `<option value="">全部课程</option>`;
   courses.forEach((course) => {
     const option = document.createElement("option");
@@ -300,20 +309,40 @@ function renderCourseFilter() {
     option.textContent = course;
     els.courseFilter.append(option);
   });
-  els.courseFilter.value = current;
+  els.courseFilter.value = courses.includes(current) ? current : "";
+}
+
+function renderTopicFilter() {
+  if (!els.topicFilter) return;
+  const current = els.topicFilter.value;
+  const course = els.courseFilter.value;
+  const topics = [...new Set(questions
+    .filter((question) => !course || question.course === course)
+    .map((question) => question.topic)
+    .filter(Boolean))].sort();
+  els.topicFilter.innerHTML = `<option value="">全部章节</option>`;
+  topics.forEach((topic) => {
+    const option = document.createElement("option");
+    option.value = topic;
+    option.textContent = topic;
+    els.topicFilter.append(option);
+  });
+  els.topicFilter.value = topics.includes(current) ? current : "";
 }
 
 function renderLibrary() {
   const rawQuery = els.searchInput.value.trim();
   const query = normalizeText(rawQuery);
   const course = els.courseFilter.value;
+  const topic = els.topicFilter?.value || "";
   const status = els.statusFilter.value;
   const filtered = questions.filter((question) => {
     const haystack = normalizeText(getQuestionComparableText(question));
     const matchesQuery = !query || haystack.includes(query);
     const matchesCourse = !course || question.course === course;
+    const matchesTopic = !topic || question.topic === topic;
     const matchesStatus = !status || (status === "explained" && question.explanation) || (status === "todo" && !question.explanation) || (status === "reviewed" && question.reviewed);
-    return matchesQuery && matchesCourse && matchesStatus;
+    return matchesQuery && matchesCourse && matchesTopic && matchesStatus;
   });
   els.questionList.innerHTML = "";
   if (!filtered.length) {
@@ -557,7 +586,7 @@ function renderDuplicates() {
   for (let i = 0; i < questions.length; i += 1) {
     for (let j = i + 1; j < questions.length; j += 1) {
       const score = similarity(getQuestionComparableText(questions[i]), getQuestionComparableText(questions[j]));
-      if (score >= 0.55) pairs.push({ first: questions[i], second: questions[j], score });
+      if (score >= 0.5) pairs.push({ first: questions[i], second: questions[j], score });
     }
   }
   pairs.sort((a, b) => b.score - a.score);
@@ -574,8 +603,15 @@ function renderDuplicates() {
   });
 }
 
-function findSimilarQuestions(text, excludeId) {
-  return questions.filter((question) => question.id !== excludeId).map((question) => ({ question, score: similarity(text, getQuestionComparableText(question)) })).filter((match) => match.score >= 0.55).sort((a, b) => b.score - a.score);
+function findSimilarQuestions(text, excludeId, threshold = 0.5) {
+  return questions
+    .filter((question) => question.id !== excludeId)
+    .map((question) => ({
+      question,
+      score: similarity(text, getQuestionComparableText(question)),
+    }))
+    .filter((match) => match.score >= threshold)
+    .sort((a, b) => b.score - a.score);
 }
 
 function getFormComparableText() { return `${els.questionInput.value}\n${els.optionsInput.value}`; }
@@ -595,7 +631,7 @@ function showFormMessage(message) { els.duplicatePreview.hidden = false; els.dup
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
 function confirmDuplicateQuestion(candidate) {
-  const matches = findSimilarQuestions(getQuestionComparableText(candidate), editingId).filter((match) => match.score >= 0.5).slice(0, 3);
+  const matches = findSimilarQuestions(getQuestionComparableText(candidate), editingId, 0.5).slice(0, 3);
   if (!matches.length) return Promise.resolve(true);
 
   return new Promise((resolve) => {
@@ -733,6 +769,13 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
+
+
+
+
+
 
 
 

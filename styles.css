@@ -176,6 +176,7 @@ main {
 }
 
 .drop-zone {
+  position: relative;
   display: grid;
   min-height: 220px;
   place-items: center;
@@ -198,6 +199,11 @@ main {
   font-weight: 800;
 }
 
+.drop-zone.has-image .drop-title,
+.drop-zone.has-image .drop-subtitle {
+  display: none;
+}
+
 .drop-subtitle {
   max-width: 280px;
   color: var(--muted);
@@ -205,8 +211,8 @@ main {
 
 .preview-image {
   width: 100%;
-  max-height: 340px;
-  margin-top: 16px;
+  max-height: 360px;
+  margin-top: 0;
   border-radius: 8px;
   object-fit: contain;
   background: #edf2f0;
@@ -311,6 +317,7 @@ textarea:focus {
 
 .filters select {
   max-width: 190px;
+  min-width: 150px;
 }
 
 .question-list,
@@ -527,6 +534,11 @@ textarea:focus {
 }
 
 
+.drop-zone.has-image {
+  padding: 10px;
+  background: #ffffff;
+}
+
 .drop-zone.drag-over {
   border-color: var(--accent);
   background: #edf7f4;
@@ -600,3 +612,4 @@ textarea:focus {
   background: #fff;
   object-fit: contain;
 }
+
