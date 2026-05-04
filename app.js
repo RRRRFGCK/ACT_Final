@@ -7,6 +7,8 @@ let dbMode = "local";
 let supabaseClient = null;
 let currentReviewQuestionId = null;
 const reviewHistoryByScope = new Map();
+let reviewHistoryKey = "";
+let reviewRecentIds = [];
 
 const els = {
   views: document.querySelectorAll(".view"),
@@ -597,19 +599,29 @@ function renderRandomQuestion() {
 
   const options = document.createElement("div");
   options.className = "choice-list";
-  shuffleArray([...(question.options || [])]).forEach((option, index) => {
+  const shuffledOptions = shuffleArray([...(question.options || [])]);
+  const displayToOriginal = new Map();
+  const originalToDisplay = new Map();
+  shuffledOptions.forEach((option, index) => {
     const button = document.createElement("button");
     button.className = "choice-button";
-    const label = option.label || String.fromCharCode(65 + index);
-    button.dataset.label = label;
-    setMathHTML(button, `${label}. ${option.text || ""}`);
+    const displayLabel = String.fromCharCode(65 + index);
+    const originalLabel = (option.label || String.fromCharCode(65 + index)).toUpperCase();
+    displayToOriginal.set(displayLabel, originalLabel);
+    originalToDisplay.set(originalLabel, displayLabel);
+    button.dataset.label = displayLabel;
+    button.dataset.originalLabel = originalLabel;
+    setMathHTML(button, `${displayLabel}. ${option.text || ""}`);
     button.addEventListener("click", () => {
-      selectedChoice = label;
+      selectedChoice = displayLabel;
       options.querySelectorAll(".choice-button").forEach((item) => item.classList.remove("selected"));
       button.classList.add("selected");
     });
     options.append(button);
   });
+
+  const correctOriginalLabel = String(question.correctAnswer || "").trim().toUpperCase();
+  const correctDisplayLabel = originalToDisplay.get(correctOriginalLabel) || correctOriginalLabel;
 
   const result = document.createElement("div");
   result.className = "answer-result";
@@ -634,14 +646,14 @@ function renderRandomQuestion() {
       return;
     }
 
-    const correct = String(question.correctAnswer || "").trim().toUpperCase();
+    const selectedOriginal = displayToOriginal.get(selectedChoice) || selectedChoice;
     result.hidden = false;
-    if (correct && selectedChoice === correct) {
+    if (correctOriginalLabel && selectedOriginal === correctOriginalLabel) {
       result.className = "answer-result correct";
       result.textContent = `答对了：${selectedChoice}`;
-    } else if (correct) {
+    } else if (correctOriginalLabel) {
       result.className = "answer-result wrong";
-      result.textContent = `你选了 ${selectedChoice}，正确答案是 ${correct}`;
+      result.textContent = `你选了 ${selectedChoice}，正确答案是 ${correctDisplayLabel}`;
     } else {
       result.className = "answer-result";
       result.textContent = `已选择 ${selectedChoice}，这题还没有标准答案。`;
@@ -659,7 +671,7 @@ function renderRandomQuestion() {
   detail.className = "answer-block";
   detail.hidden = true;
   setMathHTML(detail, [
-    question.correctAnswer ? `正确选项：${question.correctAnswer}` : "",
+    correctOriginalLabel ? `正确选项：${correctDisplayLabel}` : "",
     question.answer ? `答案/备注：\n${question.answer}` : "",
     question.explanation ? `解析：\n${question.explanation}` : "解析：暂无"
   ].filter(Boolean).join("\n\n"));
@@ -882,6 +894,11 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
+
+
+
 
 
 
