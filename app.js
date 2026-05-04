@@ -168,7 +168,9 @@ async function runAiExtract() {
     els.topicInput.value = data.chapter || inferTopicFromRefs(data.sourceRefs || data.matchedMaterials || []) || "待确认章节";
     els.tagsInput.value = mergeTags(els.tagsInput.value, [data.knowledgePoint, ...(data.sourceRefs || [])]);
     els.explanationInput.value = buildExplanationWithContext(data);
-    setStatus(data.chapter ? `AI 识别完成：${data.chapter}` : "AI 识别完成，建议快速检查一遍");
+    const modelLabel = data.modelUsed ? `：${data.modelUsed}` : "";
+    const chapterLabel = data.chapter ? `，${data.chapter}` : "，建议快速检查一遍";
+    setStatus(`AI 识别完成${modelLabel}${chapterLabel}`);
     renderDuplicatePreview();
   } catch (error) {
     console.error(error);
@@ -769,6 +771,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 

@@ -22,16 +22,18 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const extracted = await extractQuestionFromImage(apiKey, imageDataUrl);
+    const modelUsed = getOpenAIModel();
+    const extracted = await extractQuestionFromImage(apiKey, imageDataUrl, modelUsed);
     const relevantChunks = findRelevantMaterialChunks(extracted, 5);
     const enriched = relevantChunks.length
-      ? await enrichWithLectureContext(apiKey, extracted, relevantChunks)
+      ? await enrichWithLectureContext(apiKey, extracted, relevantChunks, modelUsed)
       : extracted;
 
     response.status(200).json({
       ...extracted,
       ...enriched,
       sourceRefs: enriched.sourceRefs || relevantChunks.map((chunk) => chunk.ref),
+      modelUsed,
       matchedMaterials: relevantChunks.map((chunk) => ({
         ref: chunk.ref,
         lecture: chunk.lecture,
@@ -44,9 +46,13 @@ module.exports = async function handler(request, response) {
   }
 };
 
-async function extractQuestionFromImage(apiKey, imageDataUrl) {
+function getOpenAIModel() {
+  return process.env.OPENAI_MODEL || "gpt-5.5";
+}
+
+async function extractQuestionFromImage(apiKey, imageDataUrl, modelUsed) {
   const openaiResponse = await callOpenAI(apiKey, {
-    model: process.env.OPENAI_MODEL || "gpt-5.5",
+    model: modelUsed,
     input: [
       {
         role: "user",
@@ -80,14 +86,14 @@ async function extractQuestionFromImage(apiKey, imageDataUrl) {
   return parseJsonOutput(extractOutputText(openaiResponse));
 }
 
-async function enrichWithLectureContext(apiKey, extracted, chunks) {
+async function enrichWithLectureContext(apiKey, extracted, chunks, modelUsed = getOpenAIModel()) {
   const context = chunks.map((chunk, index) => [
     `[${index + 1}] ${chunk.ref}`,
     chunk.content
   ].join("\n")).join("\n\n---\n\n");
 
   const response = await callOpenAI(apiKey, {
-    model: process.env.OPENAI_MODEL || "gpt-5.5",
+    model: modelUsed,
     input: [
       {
         role: "user",
@@ -214,4 +220,5 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 }
+
 
