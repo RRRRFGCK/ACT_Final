@@ -722,9 +722,38 @@ function renderDuplicates() {
   pairs.forEach((pair) => {
     const item = document.createElement("article");
     item.className = "duplicate-item";
-    item.innerHTML = `<div class="duplicate-score">相似度 ${Math.round(pair.score * 100)}%</div><div><strong>${escapeHtml(pair.first.course)} / ${escapeHtml(pair.first.topic)}</strong><p>${escapeHtml(pair.first.text)}</p></div><div><strong>${escapeHtml(pair.second.course)} / ${escapeHtml(pair.second.topic)}</strong><p>${escapeHtml(pair.second.text)}</p></div>`;
+    item.innerHTML = `
+      <div class="duplicate-score">相似度 ${Math.round(pair.score * 100)}%</div>
+      <div class="duplicate-compare">
+        ${renderDuplicateSide(pair.first, "左边题目")}
+        ${renderDuplicateSide(pair.second, "右边题目")}
+      </div>
+    `;
+    item.querySelectorAll("[data-action='edit']").forEach((button) => {
+      button.addEventListener("click", () => editQuestion(button.dataset.id));
+    });
+    item.querySelectorAll("[data-action='delete']").forEach((button) => {
+      button.addEventListener("click", () => deleteQuestion(button.dataset.id));
+    });
     els.duplicateList.append(item);
   });
+}
+
+function renderDuplicateSide(question, label) {
+  return `
+    <section class="duplicate-side">
+      <div class="duplicate-side-heading">
+        <span>${label}</span>
+        <strong>${escapeHtml(question.course)} / ${escapeHtml(question.topic)}</strong>
+      </div>
+      ${question.imageData ? `<img class="duplicate-side-image" src="${question.imageData}" alt="题目原图">` : ""}
+      <p>${escapeHtml(question.text)}</p>
+      <div class="duplicate-side-actions">
+        <button class="secondary-button" type="button" data-action="edit" data-id="${question.id}">编辑</button>
+        <button class="danger-button" type="button" data-action="delete" data-id="${question.id}">删除</button>
+      </div>
+    </section>
+  `;
 }
 
 function findSimilarQuestions(text, excludeId, threshold = 0.5) {
@@ -894,6 +923,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 
