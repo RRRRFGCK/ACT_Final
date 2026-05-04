@@ -46,7 +46,7 @@ module.exports = async function handler(request, response) {
 
 async function extractQuestionFromImage(apiKey, imageDataUrl) {
   const openaiResponse = await callOpenAI(apiKey, {
-    model: "gpt-4.1-mini",
+    model: process.env.OPENAI_MODEL || "gpt-5.5",
     input: [
       {
         role: "user",
@@ -87,7 +87,7 @@ async function enrichWithLectureContext(apiKey, extracted, chunks) {
   ].join("\n")).join("\n\n---\n\n");
 
   const response = await callOpenAI(apiKey, {
-    model: "gpt-4.1-mini",
+    model: process.env.OPENAI_MODEL || "gpt-5.5",
     input: [
       {
         role: "user",
@@ -214,3 +214,4 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 }
+
