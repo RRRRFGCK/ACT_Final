@@ -158,8 +158,11 @@ async function runAiExtract() {
     els.optionsInput.value = formatOptions(data.options || []);
     els.correctAnswerInput.value = data.correctAnswer || "";
     els.answerInput.value = normalizeAnswerContent(data.answer, data.correctAnswer, data.options || []);
-    els.explanationInput.value = data.explanation || data.notes || "";
-    setStatus("AI 识别完成，建议快速检查一遍");
+    els.courseInput.value = "Imperial CSP ACT";
+    els.topicInput.value = data.chapter || inferTopicFromRefs(data.sourceRefs || data.matchedMaterials || []) || "待确认章节";
+    els.tagsInput.value = mergeTags(els.tagsInput.value, [data.knowledgePoint, ...(data.sourceRefs || [])]);
+    els.explanationInput.value = buildExplanationWithContext(data);
+    setStatus(data.chapter ? `AI 识别完成：${data.chapter}` : "AI 识别完成，建议快速检查一遍");
     renderDuplicatePreview();
   } catch (error) {
     console.error(error);
@@ -624,6 +627,36 @@ function confirmDuplicateQuestion(candidate) {
     });
   });
 }
+function buildExplanationWithContext(data) {
+  const parts = [];
+  if (data.chapter || data.knowledgePoint || data.sourceRefs?.length) {
+    parts.push([
+      data.chapter ? `章节：${data.chapter}` : "",
+      data.knowledgePoint ? `知识点：${data.knowledgePoint}` : "",
+      data.sourceRefs?.length ? `课件参考：${data.sourceRefs.join("；")}` : ""
+    ].filter(Boolean).join("\n"));
+  }
+  if (data.explanation || data.notes) parts.push(data.explanation || data.notes);
+  return parts.filter(Boolean).join("\n\n");
+}
+
+function inferTopicFromRefs(refs) {
+  const first = refs[0];
+  if (!first) return "";
+  if (typeof first === "string") return first;
+  return first.ref || [first.lecture, first.title, first.page ? `page ${first.page}` : ""].filter(Boolean).join(" ");
+}
+
+function mergeTags(existingValue, values) {
+  const current = parseTags(existingValue);
+  const next = values
+    .filter(Boolean)
+    .flatMap((value) => String(value).split(/[;,，；]/))
+    .map((value) => value.trim())
+    .filter(Boolean)
+    .filter((value) => value.length <= 80);
+  return [...new Set([...current, ...next])].join(", ");
+}
 function normalizeAnswerContent(answer, correctAnswer, options) {
   const raw = String(answer || "").trim();
   const label = String(correctAnswer || "").trim().toUpperCase();
@@ -700,6 +733,7 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
 
 
 
