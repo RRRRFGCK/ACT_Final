@@ -22,18 +22,21 @@ module.exports = async function handler(request, response) {
       return;
     }
 
-    const modelUsed = getOpenAIModel();
-    const extracted = await extractQuestionFromImage(apiKey, imageDataUrl, modelUsed);
+    const extractModelUsed = getExtractModel();
+    const solveModelUsed = getSolveModel();
+    const extracted = await extractQuestionFromImage(apiKey, imageDataUrl, extractModelUsed);
     const relevantChunks = findRelevantMaterialChunks(extracted, 5);
     const enriched = relevantChunks.length
-      ? await enrichWithLectureContext(apiKey, extracted, relevantChunks, modelUsed)
+      ? await enrichWithLectureContext(apiKey, extracted, relevantChunks, solveModelUsed)
       : extracted;
 
     response.status(200).json({
       ...extracted,
       ...enriched,
       sourceRefs: enriched.sourceRefs || relevantChunks.map((chunk) => chunk.ref),
-      modelUsed,
+      modelUsed: `提取 ${extractModelUsed} / 解析 ${solveModelUsed}`,
+      extractModelUsed,
+      solveModelUsed,
       matchedMaterials: relevantChunks.map((chunk) => ({
         ref: chunk.ref,
         lecture: chunk.lecture,
@@ -46,8 +49,12 @@ module.exports = async function handler(request, response) {
   }
 };
 
-function getOpenAIModel() {
-  return process.env.OPENAI_MODEL || "gpt-5.5";
+function getExtractModel() {
+  return process.env.OPENAI_EXTRACT_MODEL || "gpt-4.1-mini";
+}
+
+function getSolveModel() {
+  return process.env.OPENAI_SOLVE_MODEL || process.env.OPENAI_MODEL || "gpt-5.5";
 }
 
 async function extractQuestionFromImage(apiKey, imageDataUrl, modelUsed) {
@@ -86,7 +93,7 @@ async function extractQuestionFromImage(apiKey, imageDataUrl, modelUsed) {
   return parseJsonOutput(extractOutputText(openaiResponse));
 }
 
-async function enrichWithLectureContext(apiKey, extracted, chunks, modelUsed = getOpenAIModel()) {
+async function enrichWithLectureContext(apiKey, extracted, chunks, modelUsed = getSolveModel()) {
   const context = chunks.map((chunk, index) => [
     `[${index + 1}] ${chunk.ref}`,
     chunk.content
@@ -220,5 +227,6 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 }
+
 
 
