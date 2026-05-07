@@ -148,6 +148,9 @@ async function solveWithLectureContext(apiKey, extracted, chunks, located, model
               "{\"correctAnswer\": string, \"answer\": string, \"explanation\": string}",
               "The answer field must contain only the final answer value/content, not the option label and not a sentence like 'correct answer is B'.",
               "The explanation must be in Chinese and start with a short source line like: 课件定位：ACT_2 Diversity Theory, page 12；知识点：...",
+              "After the main solution, add an option-by-option section when useful. For each option whose underlying knowledge point, formula, assumption, or common trap differs, explain briefly why it is correct or wrong.",
+              "If several options differ only by numerical substitution, keep the comparison concise. If options reflect different concepts or formulas, explain them in more detail.",
+              "Use clear labels like A、B、C、D in the explanation section, but keep the answer field as final content only.",
               "Use MathJax-ready LaTeX with $...$ around math.",
               "If the lecture context is not enough, say 基于课件相关页和题目推导 in the explanation, but still answer if possible.",
               "Question JSON:",
@@ -263,6 +266,8 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 }
+
+
 
 
 
