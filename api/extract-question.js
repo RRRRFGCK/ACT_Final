@@ -73,11 +73,13 @@ async function extractQuestionFromImage(apiKey, imageDataUrl, modelUsed) {
               "Return only valid JSON, with no markdown fences.",
               "Schema: {\"question\": string, \"options\": [{\"label\": \"A\", \"text\": string}], \"correctAnswer\": string, \"answer\": string, \"explanation\": string, \"notes\": string}.",
               "Extract every visible option as a separate options array item. Preserve mathematical notation carefully.",
-              "Use LaTeX for exponents, matrices, subscripts, Greek letters, probabilities, and equations. Wrap every mathematical expression in $...$ so it can be rendered by MathJax, for example $\\sqrt{4^2 + 1.5^2} = 4.272$.",
+              "Do not leave blanks for mathematical variables, numbers, antenna counts, angles, matrix symbols, vectors, subscripts, or directions. If the image contains N, M, theta, phi, d, lambda, R, x, s, or similar values, transcribe them explicitly.",
+              "Use LaTeX for exponents, matrices, subscripts, Greek letters, probabilities, covariance matrices, vectors, and equations. Wrap every mathematical expression in $...$ so it can be rendered by MathJax, for example $\\sqrt{4^2 + 1.5^2} = 4.272$.",
+              "For matrices, prefer LaTeX such as $\\begin{bmatrix} ... \\end{bmatrix}$ with rows separated by \\\\ and columns by &. Do not output MATLAB copy instructions as the only matrix representation.",
               "Keep option labels as A, B, C, D, E when present.",
               "If a visible tick, x mark, bracket, highlight, or handwritten mark clearly indicates an answer, put that label in correctAnswer; otherwise leave correctAnswer empty.",
               "Do not solve the question in this step. Leave answer and explanation empty unless they are explicitly visible in the image.",
-              "Still prioritize accurate transcription of the visible question and options."
+              "Still prioritize accurate transcription of the visible question and options. If any required value is unreadable, write [unreadable] rather than leaving a blank."
             ].join(" ")
           },
           {
@@ -151,7 +153,8 @@ async function solveWithLectureContext(apiKey, extracted, chunks, located, model
               "After the main solution, add an option-by-option section when useful. For each option whose underlying knowledge point, formula, assumption, or common trap differs, explain briefly why it is correct or wrong.",
               "If several options differ only by numerical substitution, keep the comparison concise. If options reflect different concepts or formulas, explain them in more detail.",
               "Use clear labels like A、B、C、D in the explanation section, but keep the answer field as final content only.",
-              "Use MathJax-ready LaTeX with $...$ around math.",
+              "Use MathJax-ready LaTeX with $...$ around math. Do not leave empty math delimiters or incomplete formulas.",
+              "Use real line breaks in JSON strings, not literal \\n text. Never output visible \\n or \\t sequences in the explanation.",
               "If the lecture context is not enough, say 基于课件相关页和题目推导 in the explanation, but still answer if possible.",
               "Question JSON:",
               JSON.stringify(extracted),
@@ -266,6 +269,8 @@ function parseJsonOutput(text) {
     throw new Error("AI did not return valid JSON.");
   }
 }
+
+
 
 
 

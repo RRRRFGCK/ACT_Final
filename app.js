@@ -175,14 +175,14 @@ async function runAiExtract() {
       throw new Error(`AI 接口没有返回 JSON。可能是 /api/extract-question 没部署成功。返回内容：${shortText}`);
     }
     if (!response.ok) throw new Error(data.error || "AI 识别失败");
-    els.questionInput.value = data.question || "";
-    els.optionsInput.value = formatOptions(data.options || []);
+    els.questionInput.value = cleanAIText(data.question || "");
+    els.optionsInput.value = formatOptions(cleanOptions(data.options || []));
     els.correctAnswerInput.value = data.correctAnswer || "";
     els.answerInput.value = normalizeAnswerContent(data.answer, data.correctAnswer, data.options || []);
     els.courseInput.value = "Imperial CSP ACT";
     els.topicInput.value = data.chapter || inferTopicFromRefs(data.sourceRefs || data.matchedMaterials || []) || "待确认章节";
     els.tagsInput.value = mergeTags(els.tagsInput.value, [data.knowledgePoint, ...(data.sourceRefs || [])]);
-    els.explanationInput.value = buildExplanationWithContext(data);
+    els.explanationInput.value = cleanAIText(buildExplanationWithContext(data));
     const modelLabel = data.modelUsed ? `：${data.modelUsed}` : "";
     const chapterLabel = data.chapter ? `，${data.chapter}` : "，建议快速检查一遍";
     setStatus(`AI 识别完成${modelLabel}${chapterLabel}`);
@@ -196,7 +196,7 @@ async function runAiExtract() {
 }
 
 async function saveQuestionFromForm() {
-  const text = els.questionInput.value.trim();
+  const text = cleanAIText(els.questionInput.value.trim());
   if (!text) return showFormMessage("题目内容不能为空。");
 
   const wasEditing = Boolean(editingId);
@@ -214,10 +214,10 @@ async function saveQuestionFromForm() {
       type: els.typeInput.value,
       difficulty: els.difficultyInput.value,
       text,
-      options: parseOptions(els.optionsInput.value),
+      options: cleanOptions(parseOptions(els.optionsInput.value)),
       correctAnswer: els.correctAnswerInput.value.trim().toUpperCase(),
       answer: els.answerInput.value.trim(),
-      explanation: els.explanationInput.value.trim() || existing?.explanation || els.questionInput.dataset.explanationDraft || "",
+      explanation: cleanAIText(els.explanationInput.value.trim() || existing?.explanation || els.questionInput.dataset.explanationDraft || ""),
       imageData: selectedImage ? await fileToResizedDataUrl(selectedImage) : existing?.imageData || "",
       tags: parseTags(els.tagsInput.value),
       reviewed: existing?.reviewed || false,
@@ -267,7 +267,7 @@ async function saveCloudQuestion(question) {
 }
 
 function generateExplanationDraft() {
-  const text = els.questionInput.value.trim();
+  const text = cleanAIText(els.questionInput.value.trim());
   if (!text) return showFormMessage("先填入题目内容，再生成解析草稿。");
   const draft = [
     "解析草稿", "", "题目：", text,
@@ -779,8 +779,8 @@ function parseTags(value) { return value.split(/[,，]/).map((tag) => tag.trim()
 function loadQuestions() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
 function persistQuestions() { localStorage.setItem(STORAGE_KEY, JSON.stringify(questions)); }
 function exportQuestions() { const blob = new Blob([JSON.stringify(questions, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `final-review-question-bank-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); URL.revokeObjectURL(url); }
-function toCloudQuestion(question) { return { course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: question.text, image_data: question.imageData || "", options: question.options || [], correct_answer: question.correctAnswer || "", answer: question.answer, explanation: question.explanation, tags: question.tags, reviewed: question.reviewed, updated_at: question.updatedAt }; }
-function fromCloudQuestion(question) { return { id: question.id, course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: question.text, imageData: question.image_data || "", options: question.options || [], correctAnswer: question.correct_answer || "", answer: question.answer || "", explanation: question.explanation || "", tags: question.tags || [], reviewed: Boolean(question.reviewed), createdAt: question.created_at, updatedAt: question.updated_at }; }
+function toCloudQuestion(question) { return { course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: cleanAIText(question.text), image_data: question.imageData || "", options: cleanOptions(question.options || []), correct_answer: question.correctAnswer || "", answer: cleanAIText(question.answer), explanation: cleanAIText(question.explanation), tags: question.tags, reviewed: question.reviewed, updated_at: question.updatedAt }; }
+function fromCloudQuestion(question) { return { id: question.id, course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: cleanAIText(question.text), imageData: question.image_data || "", options: cleanOptions(question.options || []), correctAnswer: question.correct_answer || "", answer: cleanAIText(question.answer || ""), explanation: cleanAIText(question.explanation || ""), tags: question.tags || [], reviewed: Boolean(question.reviewed), createdAt: question.created_at, updatedAt: question.updated_at }; }
 function showFormMessage(message) { els.duplicatePreview.hidden = false; els.duplicatePreview.textContent = message; }
 function setStatus(message) { els.ocrStatus.textContent = message; }
 function fileToResizedDataUrl(file) { return new Promise((resolve, reject) => { const image = new Image(); const reader = new FileReader(); reader.onload = () => { image.onload = () => { const maxSide = 1800; const scale = Math.min(1, maxSide / Math.max(image.width, image.height)); const canvas = document.createElement("canvas"); canvas.width = Math.round(image.width * scale); canvas.height = Math.round(image.height * scale); const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, canvas.width, canvas.height); resolve(canvas.toDataURL("image/jpeg", 0.88)); }; image.onerror = reject; image.src = reader.result; }; reader.onerror = reject; reader.readAsDataURL(file); }); }
@@ -873,8 +873,31 @@ function shuffleArray(items) {
   }
   return items;
 }
+function cleanOptions(options) {
+  return (options || []).map((option, index) => {
+    if (typeof option === "string") {
+      return { label: String.fromCharCode(65 + index), text: cleanAIText(option) };
+    }
+    return {
+      ...option,
+      label: option.label || String.fromCharCode(65 + index),
+      text: cleanAIText(option.text || "")
+    };
+  });
+}
+function cleanAIText(value) {
+  return String(value || "")
+    .replace(/\\n/g, "\n")
+    .replace(/\\t/g, "  ")
+    .replace(/\$\s*\$/g, "")
+    .replace(/\\\(\s*\\\)/g, "")
+    .replace(/\\\[\s*\\\]/g, "")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
 function setMathHTML(element, value, highlight = "") {
-  const prepared = wrapBareLatex(value || "");
+  const prepared = wrapBareLatex(cleanAIText(value || ""));
   const escaped = escapeHtml(prepared).replace(/\n/g, "<br>");
   element.innerHTML = highlightEscapedHTML(escaped, highlight);
 }
@@ -923,6 +946,8 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
 
 
 
