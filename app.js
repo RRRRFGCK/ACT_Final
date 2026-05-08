@@ -37,6 +37,7 @@ const els = {
   topicFilter: document.getElementById("topicFilter"),
   statusFilter: document.getElementById("statusFilter"),
   exportButton: document.getElementById("exportButton"),
+  pdfExportButton: document.getElementById("pdfExportButton"),
   reviewPanel: document.getElementById("reviewPanel"),
   randomQuestionButton: document.getElementById("randomQuestionButton"),
   reviewCourseFilter: document.getElementById("reviewCourseFilter"),
@@ -68,6 +69,7 @@ els.courseFilter.addEventListener("change", () => {
 els.topicFilter?.addEventListener("change", renderLibrary);
 els.statusFilter.addEventListener("change", renderLibrary);
 els.exportButton.addEventListener("click", exportQuestions);
+els.pdfExportButton?.addEventListener("click", exportQuestionsPDF);
 els.randomQuestionButton.addEventListener("click", renderRandomQuestion);
 els.reviewCourseFilter?.addEventListener("change", () => {
   resetReviewMemory();
@@ -423,13 +425,13 @@ function pickReviewQuestion(available, scopeKey) {
   return question;
 }
 
-function renderLibrary() {
+function getFilteredLibraryQuestions() {
   const rawQuery = els.searchInput.value.trim();
   const query = normalizeText(rawQuery);
   const course = els.courseFilter.value;
   const topic = els.topicFilter?.value || "";
   const status = els.statusFilter.value;
-  const filtered = questions.filter((question) => {
+  return questions.filter((question) => {
     const haystack = normalizeText(getQuestionComparableText(question));
     const matchesQuery = !query || haystack.includes(query);
     const matchesCourse = !course || question.course === course;
@@ -437,6 +439,11 @@ function renderLibrary() {
     const matchesStatus = !status || (status === "explained" && question.explanation) || (status === "todo" && !question.explanation) || (status === "reviewed" && question.reviewed);
     return matchesQuery && matchesCourse && matchesTopic && matchesStatus;
   });
+}
+
+function renderLibrary() {
+  const rawQuery = els.searchInput.value.trim();
+  const filtered = getFilteredLibraryQuestions();
   els.questionList.innerHTML = "";
   if (!filtered.length) {
     els.questionList.innerHTML = `<p class="empty-state">没有找到匹配关键词的题目。</p>`;
@@ -778,6 +785,91 @@ function formatOptions(options) { return (options || []).map((option, index) => 
 function parseTags(value) { return value.split(/[,，]/).map((tag) => tag.trim()).filter(Boolean); }
 function loadQuestions() { try { return JSON.parse(localStorage.getItem(STORAGE_KEY)) || []; } catch { return []; } }
 function persistQuestions() { localStorage.setItem(STORAGE_KEY, JSON.stringify(questions)); }
+function exportQuestionsPDF() {
+  const selected = getFilteredLibraryQuestions();
+  if (!selected.length) {
+    alert("当前筛选条件下没有题目可以导出。");
+    return;
+  }
+
+  const printWindow = window.open("", "_blank");
+  if (!printWindow) {
+    alert("浏览器拦截了打印窗口，请允许弹窗后再试一次。");
+    return;
+  }
+
+  const pages = selected.map((question, index) => renderPDFQuestionPage(question, index + 1)).join("\n");
+  printWindow.document.open();
+  printWindow.document.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Imperial CSP ACT 复习题 PDF</title>
+  <script>
+    window.MathJax = {
+      tex: { inlineMath: [["$", "$"], ["\\\\(", "\\\\)"]], displayMath: [["$$", "$$"], ["\\\\[", "\\\\]"]], processEscapes: true },
+      svg: { fontCache: "global" }
+    };
+  <\/script>
+  <script defer src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-svg.js"><\/script>
+  <style>
+    @page { size: A4; margin: 14mm; }
+    * { box-sizing: border-box; }
+    body { margin: 0; color: #17212b; font-family: Arial, "Microsoft YaHei", sans-serif; line-height: 1.45; }
+    .pdf-page { min-height: 260mm; page-break-after: always; break-after: page; padding: 0; }
+    .pdf-page:last-child { page-break-after: auto; break-after: auto; }
+    .pdf-header { display: flex; justify-content: space-between; gap: 16px; padding-bottom: 8px; border-bottom: 1px solid #d8e0e5; font-size: 12px; color: #5f6f7a; }
+    h1 { margin: 14px 0 10px; font-size: 20px; }
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+    .chip { padding: 3px 8px; border-radius: 999px; background: #edf3f1; color: #2e5752; font-size: 11px; font-weight: 700; }
+    .question-image { display: block; width: 100%; max-height: 115mm; margin: 8px auto 14px; object-fit: contain; border: 1px solid #d8e0e5; border-radius: 6px; }
+    .block { margin-top: 10px; padding: 10px 12px; border: 1px solid #d8e0e5; border-radius: 6px; background: #fbfcfc; white-space: pre-wrap; overflow-wrap: anywhere; }
+    .block h2 { margin: 0 0 6px; font-size: 14px; }
+    .question-text { white-space: pre-wrap; overflow-wrap: anywhere; }
+    mjx-container { max-width: 100%; overflow-x: auto; overflow-y: hidden; }
+    svg { max-width: 100%; }
+    @media print { body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }
+  </style>
+</head>
+<body>
+${pages}
+<script>
+  window.addEventListener("load", () => {
+    const done = window.MathJax?.typesetPromise ? window.MathJax.typesetPromise() : Promise.resolve();
+    done.finally(() => window.setTimeout(() => window.print(), 400));
+  });
+<\/script>
+</body>
+</html>`);
+  printWindow.document.close();
+}
+
+function renderPDFQuestionPage(question, number) {
+  const chips = [question.course, question.topic, question.type, question.difficulty, ...(question.tags || [])]
+    .filter(Boolean)
+    .map((label) => `<span class="chip">${escapeHtml(label)}</span>`)
+    .join("");
+  const options = formatOptions(question.options || []);
+  const answerParts = [
+    question.correctAnswer ? `正确选项：${question.correctAnswer}` : "",
+    question.answer ? `答案：\n${question.answer}` : ""
+  ].filter(Boolean).join("\n\n");
+
+  return `<section class="pdf-page">
+    <div class="pdf-header"><span>Imperial CSP ACT 复习</span><span>题目 ${number} / ${getFilteredLibraryQuestions().length}</span></div>
+    <h1>题目 ${number}</h1>
+    <div class="chips">${chips}</div>
+    ${question.imageData ? `<img class="question-image" src="${question.imageData}" alt="题目原图">` : ""}
+    <div class="block"><h2>题干</h2><div class="question-text">${mathHTMLForPrint(question.text)}</div></div>
+    ${options ? `<div class="block"><h2>选项</h2>${mathHTMLForPrint(options)}</div>` : ""}
+    ${answerParts ? `<div class="block"><h2>答案</h2>${mathHTMLForPrint(answerParts)}</div>` : ""}
+    ${question.explanation ? `<div class="block"><h2>解析</h2>${mathHTMLForPrint(question.explanation)}</div>` : ""}
+  </section>`;
+}
+
+function mathHTMLForPrint(value) {
+  return escapeHtml(wrapBareLatex(cleanAIText(value || ""))).replace(/\n/g, "<br>");
+}
 function exportQuestions() { const blob = new Blob([JSON.stringify(questions, null, 2)], { type: "application/json" }); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `final-review-question-bank-${new Date().toISOString().slice(0, 10)}.json`; anchor.click(); URL.revokeObjectURL(url); }
 function toCloudQuestion(question) { return { course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: cleanAIText(question.text), image_data: question.imageData || "", options: cleanOptions(question.options || []), correct_answer: question.correctAnswer || "", answer: cleanAIText(question.answer), explanation: cleanAIText(question.explanation), tags: question.tags, reviewed: question.reviewed, updated_at: question.updatedAt }; }
 function fromCloudQuestion(question) { return { id: question.id, course: question.course, topic: question.topic, type: question.type, difficulty: question.difficulty, text: cleanAIText(question.text), imageData: question.image_data || "", options: cleanOptions(question.options || []), correctAnswer: question.correct_answer || "", answer: cleanAIText(question.answer || ""), explanation: cleanAIText(question.explanation || ""), tags: question.tags || [], reviewed: Boolean(question.reviewed), createdAt: question.created_at, updatedAt: question.updated_at }; }
@@ -946,6 +1038,8 @@ function renderMath(root = document.body, tries = 0) {
   }
 }
 function escapeHtml(value) { return String(value).replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+
+
 
 
 

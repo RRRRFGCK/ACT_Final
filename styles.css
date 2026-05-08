@@ -703,3 +703,19 @@ textarea:focus {
     grid-template-columns: 1fr;
   }
 }
+.heading-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+@media (max-width: 900px) {
+  .heading-actions {
+    justify-content: stretch;
+  }
+
+  .heading-actions button {
+    width: 100%;
+  }
+}
