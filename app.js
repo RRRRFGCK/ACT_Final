@@ -1045,9 +1045,9 @@ function cleanOptions(options) {
   });
 }
 function cleanAIText(value) {
-  return repairLatexEscapes(String(value || ""))
+  return repairLatexEscapes(String(value || "")
     .replace(/\\n/g, "\n")
-    .replace(/\\t/g, "  ")
+    .replace(/\\t(?!ext|heta|imes)/g, "  "))
     .replace(/\$\s*\$/g, "")
     .replace(/\\\(\s*\\\)/g, "")
     .replace(/\\\[\s*\\\]/g, "")
