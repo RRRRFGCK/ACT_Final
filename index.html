@@ -1,4 +1,4 @@
-﻿<!doctype html>
+<!doctype html>
 <html lang="zh-CN">
   <head>
     <meta charset="utf-8" />
@@ -100,14 +100,17 @@
 
         <section class="view" id="reviewView">
           <div class="page-heading">
-            <div><h2>选择题练习</h2><p>选择课程和章节后专项刷题，选项会随机打乱。</p></div>
-            <button class="primary-button" id="randomQuestionButton">开始 / 下一题</button>
+            <div><h2>选择题练习</h2><p>选择课程和章节后按顺序刷题，每个浏览器会单独保存进度。</p></div>
+            <div class="heading-actions">
+              <button class="secondary-button" id="resetReviewProgressButton">重置进度</button>
+              <button class="primary-button" id="randomQuestionButton">继续刷题</button>
+            </div>
           </div>
           <div class="filters review-filters">
             <select id="reviewCourseFilter"><option value="">全部课程</option></select>
             <select id="reviewTopicFilter"><option value="">全部章节</option></select>
           </div>
-          <section class="panel review-panel" id="reviewPanel"><p class="empty-state">选择章节后点击开始，或直接从全部题目中随机练习。</p></section>
+          <section class="panel review-panel" id="reviewPanel"><p class="empty-state">选择章节后开始，或直接从全部题目中按顺序练习。</p></section>
         </section>
 
         <section class="view" id="duplicatesView">

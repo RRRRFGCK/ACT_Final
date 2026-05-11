@@ -1,4 +1,5 @@
-﻿const STORAGE_KEY = "final-review-question-bank-v2";
+const STORAGE_KEY = "final-review-question-bank-v2";
+const REVIEW_PROGRESS_KEY = "final-review-progress-v1";
 
 let questions = loadQuestions();
 let editingId = null;
@@ -6,9 +7,6 @@ let selectedImage = null;
 let dbMode = "local";
 let supabaseClient = null;
 let currentReviewQuestionId = null;
-const reviewHistoryByScope = new Map();
-let reviewHistoryKey = "";
-let reviewRecentIds = [];
 
 const els = {
   views: document.querySelectorAll(".view"),
@@ -40,6 +38,7 @@ const els = {
   pdfExportButton: document.getElementById("pdfExportButton"),
   reviewPanel: document.getElementById("reviewPanel"),
   randomQuestionButton: document.getElementById("randomQuestionButton"),
+  resetReviewProgressButton: document.getElementById("resetReviewProgressButton"),
   reviewCourseFilter: document.getElementById("reviewCourseFilter"),
   reviewTopicFilter: document.getElementById("reviewTopicFilter"),
   duplicateList: document.getElementById("duplicateList"),
@@ -71,13 +70,14 @@ els.statusFilter.addEventListener("change", renderLibrary);
 els.exportButton.addEventListener("click", exportQuestions);
 els.pdfExportButton?.addEventListener("click", exportQuestionsPDF);
 els.randomQuestionButton.addEventListener("click", renderRandomQuestion);
+els.resetReviewProgressButton?.addEventListener("click", resetCurrentReviewProgress);
 els.reviewCourseFilter?.addEventListener("change", () => {
-  resetReviewMemory();
+  currentReviewQuestionId = null;
   renderReviewTopicFilter();
   renderRandomQuestion();
 });
 els.reviewTopicFilter?.addEventListener("change", () => {
-  resetReviewMemory();
+  currentReviewQuestionId = null;
   renderRandomQuestion();
 });
 els.scanDuplicatesButton.addEventListener("click", renderDuplicates);
@@ -383,18 +383,6 @@ function renderReviewTopicFilter() {
   els.reviewTopicFilter.value = topics.includes(current) ? current : "";
 }
 
-function getReviewFilterKey() {
-  const course = els.reviewCourseFilter?.value || "";
-  const topic = els.reviewTopicFilter?.value || "";
-  return `${course}::${topic}`;
-}
-
-function resetReviewMemory() {
-  currentReviewQuestionId = null;
-  reviewHistoryKey = getReviewFilterKey();
-  reviewRecentIds = [];
-}
-
 function getReviewScope() {
   return {
     course: els.reviewCourseFilter?.value || "",
@@ -414,17 +402,73 @@ function getReviewQuestionPool(scope = getReviewScope()) {
   });
 }
 
-function pickReviewQuestion(available, scopeKey) {
-  const rememberedLimit = Math.max(1, Math.min(8, Math.ceil(available.length * 0.6)));
-  const history = (reviewHistoryByScope.get(scopeKey) || []).filter((id) => available.some((question) => question.id === id));
-  let pool = available.filter((question) => !history.includes(question.id));
-  if (!pool.length) pool = available;
-  const question = pool[Math.floor(Math.random() * pool.length)];
-  const nextHistory = [question.id, ...history.filter((id) => id !== question.id)].slice(0, rememberedLimit);
-  reviewHistoryByScope.set(scopeKey, nextHistory);
-  return question;
+function getReviewQuestionIds(available) {
+  return available.map((question) => question.id).filter(Boolean);
 }
 
+function loadReviewProgressStore() {
+  try {
+    return JSON.parse(localStorage.getItem(REVIEW_PROGRESS_KEY)) || {};
+  } catch (error) {
+    return {};
+  }
+}
+
+function saveReviewProgressStore(store) {
+  localStorage.setItem(REVIEW_PROGRESS_KEY, JSON.stringify(store));
+}
+
+function getReviewProgress(scope, available) {
+  const key = getReviewScopeKey(scope);
+  const store = loadReviewProgressStore();
+  const saved = store[key] || {};
+  const availableIds = getReviewQuestionIds(available);
+  const availableIdSet = new Set(availableIds);
+  const savedQuestionIds = Array.isArray(saved.questionIds) ? saved.questionIds : availableIds;
+  const questionIds = [
+    ...savedQuestionIds.filter((id) => availableIdSet.has(id)),
+    ...availableIds.filter((id) => !savedQuestionIds.includes(id))
+  ];
+  const completedFromIndex = Number.isFinite(Number(saved.index)) ? availableIds.slice(0, Number(saved.index)) : [];
+  const savedCompletedIds = Array.isArray(saved.completedIds) ? saved.completedIds : completedFromIndex;
+  const completedIds = savedCompletedIds.filter((id) => availableIdSet.has(id));
+  const completedIdSet = new Set(completedIds);
+  const currentId = questionIds.find((id) => !completedIdSet.has(id)) || null;
+  return {
+    key,
+    questionIds,
+    completedIds,
+    completedCount: completedIds.length,
+    currentId,
+    total: availableIds.length
+  };
+}
+
+function saveReviewProgress(key, progress, completedQuestionId = null, mergeExisting = true) {
+  const store = loadReviewProgressStore();
+  const existing = store[key] || {};
+  const existingQuestionIds = mergeExisting && Array.isArray(existing.questionIds) ? existing.questionIds : [];
+  const existingCompletedIds = mergeExisting && Array.isArray(existing.completedIds) ? existing.completedIds : [];
+  const questionIds = [...new Set([...(progress.questionIds || []), ...existingQuestionIds])];
+  const completedIds = completedQuestionId
+    ? [...new Set([...(progress.completedIds || []), ...existingCompletedIds, completedQuestionId])]
+    : [...new Set([...(progress.completedIds || []), ...existingCompletedIds])];
+  store[key] = {
+    questionIds,
+    completedIds,
+    updatedAt: new Date().toISOString()
+  };
+  saveReviewProgressStore(store);
+}
+
+function resetCurrentReviewProgress() {
+  const scope = getReviewScope();
+  const available = getReviewQuestionPool(scope);
+  const key = getReviewScopeKey(scope);
+  saveReviewProgress(key, { questionIds: getReviewQuestionIds(available), completedIds: [] }, null, false);
+  currentReviewQuestionId = null;
+  renderRandomQuestion();
+}
 function getFilteredLibraryQuestions() {
   const rawQuery = els.searchInput.value.trim();
   const query = normalizeText(rawQuery);
@@ -547,11 +591,10 @@ async function deleteQuestion(id) {
 
 function renderRandomQuestion() {
   const scope = getReviewScope();
-  const scopeKey = getReviewScopeKey(scope);
   const available = getReviewQuestionPool(scope);
   if (!questions.length) {
     currentReviewQuestionId = null;
-    els.reviewPanel.innerHTML = `<p class="empty-state">题库里有题后，这里会显示随机题目。</p>`;
+    els.reviewPanel.innerHTML = `<p class="empty-state">题库里有题后，这里会显示练习题。</p>`;
     return;
   }
   if (!available.length) {
@@ -560,28 +603,37 @@ function renderRandomQuestion() {
     return;
   }
 
-  const nextKey = getReviewFilterKey();
-  if (reviewHistoryKey !== nextKey) {
-    resetReviewMemory();
-    reviewHistoryKey = nextKey;
+  const progress = getReviewProgress(scope, available);
+  if (!progress.currentId) {
+    currentReviewQuestionId = null;
+    els.reviewPanel.innerHTML = `
+      <div class="review-complete">
+        <h3>这一套刷完了</h3>
+        <p>进度 ${available.length}/${available.length}。可以重置后再刷一遍，或者换一个章节。</p>
+        <button class="primary-button" type="button" id="completeResetButton">重置这套进度</button>
+      </div>
+    `;
+    document.getElementById("completeResetButton")?.addEventListener("click", resetCurrentReviewProgress);
+    return;
   }
 
-  const availableIds = new Set(available.map((question) => question.id));
-  reviewRecentIds = reviewRecentIds.filter((id) => availableIds.has(id));
-  const maxMemory = Math.max(1, Math.min(available.length - 1, Math.floor(available.length * 0.7)));
-  let pool = available.filter((question) => !reviewRecentIds.includes(question.id));
-  if (!pool.length) {
-    reviewRecentIds = currentReviewQuestionId ? [currentReviewQuestionId] : [];
-    pool = available.filter((question) => question.id !== currentReviewQuestionId);
+  const question = available.find((item) => item.id === progress.currentId);
+  if (!question) {
+    saveReviewProgress(progress.key, {
+      questionIds: getReviewQuestionIds(available),
+      completedIds: progress.completedIds
+    });
+    renderRandomQuestion();
+    return;
   }
-  if (!pool.length) pool = available;
-
-  const question = pool[Math.floor(Math.random() * pool.length)];
   currentReviewQuestionId = question.id;
-  reviewRecentIds.push(question.id);
-  reviewRecentIds = reviewRecentIds.slice(-maxMemory);
   let selectedChoice = "";
   els.reviewPanel.innerHTML = "";
+
+  const progressLine = document.createElement("div");
+  progressLine.className = "review-progress-line";
+  progressLine.textContent = `\u8fdb\u5ea6 ${progress.completedCount + 1}/${progress.total}`;
+  els.reviewPanel.append(progressLine);
 
   if (question.imageData) {
     const image = document.createElement("img");
@@ -594,6 +646,7 @@ function renderRandomQuestion() {
   const meta = document.createElement("div");
   meta.className = "chips";
   [question.course, question.topic, question.type, question.difficulty].forEach((label) => {
+    if (!label) return;
     const chip = document.createElement("span");
     chip.className = "chip";
     chip.textContent = label;
@@ -606,29 +659,21 @@ function renderRandomQuestion() {
 
   const options = document.createElement("div");
   options.className = "choice-list";
-  const shuffledOptions = shuffleArray([...(question.options || [])]);
-  const displayToOriginal = new Map();
-  const originalToDisplay = new Map();
-  shuffledOptions.forEach((option, index) => {
+  (question.options || []).forEach((option, index) => {
     const button = document.createElement("button");
     button.className = "choice-button";
-    const displayLabel = String.fromCharCode(65 + index);
-    const originalLabel = (option.label || String.fromCharCode(65 + index)).toUpperCase();
-    displayToOriginal.set(displayLabel, originalLabel);
-    originalToDisplay.set(originalLabel, displayLabel);
-    button.dataset.label = displayLabel;
-    button.dataset.originalLabel = originalLabel;
-    setMathHTML(button, `${displayLabel}. ${option.text || ""}`);
+    const label = (option.label || String.fromCharCode(65 + index)).toUpperCase();
+    button.dataset.label = label;
+    setMathHTML(button, `${label}. ${option.text || ""}`);
     button.addEventListener("click", () => {
-      selectedChoice = displayLabel;
+      selectedChoice = label;
       options.querySelectorAll(".choice-button").forEach((item) => item.classList.remove("selected"));
       button.classList.add("selected");
     });
     options.append(button);
   });
 
-  const correctOriginalLabel = String(question.correctAnswer || "").trim().toUpperCase();
-  const correctDisplayLabel = originalToDisplay.get(correctOriginalLabel) || correctOriginalLabel;
+  const correctLabel = String(question.correctAnswer || "").trim().toUpperCase();
 
   const result = document.createElement("div");
   result.className = "answer-result";
@@ -641,7 +686,7 @@ function renderRandomQuestion() {
 
   const nextButton = document.createElement("button");
   nextButton.className = "secondary-button";
-  nextButton.textContent = "下一题";
+  nextButton.textContent = progress.completedCount + 1 >= progress.total ? "\u5b8c\u6210\u8fd9\u5957" : "\u4e0b\u4e00\u9898";
   nextButton.hidden = true;
   nextButton.addEventListener("click", renderRandomQuestion);
 
@@ -653,20 +698,21 @@ function renderRandomQuestion() {
       return;
     }
 
-    const selectedOriginal = displayToOriginal.get(selectedChoice) || selectedChoice;
     result.hidden = false;
-    if (correctOriginalLabel && selectedOriginal === correctOriginalLabel) {
+    if (correctLabel && selectedChoice === correctLabel) {
       result.className = "answer-result correct";
       result.textContent = `答对了：${selectedChoice}`;
-    } else if (correctOriginalLabel) {
+    } else if (correctLabel) {
       result.className = "answer-result wrong";
-      result.textContent = `你选了 ${selectedChoice}，正确答案是 ${correctDisplayLabel}`;
+      result.textContent = `你选了 ${selectedChoice}，正确答案是 ${correctLabel}`;
     } else {
       result.className = "answer-result";
       result.textContent = `已选择 ${selectedChoice}，这题还没有标准答案。`;
     }
 
+    saveReviewProgress(progress.key, progress, question.id);
     confirmButton.disabled = true;
+    options.querySelectorAll(".choice-button").forEach((item) => { item.disabled = true; });
     nextButton.hidden = false;
   });
 
@@ -678,7 +724,7 @@ function renderRandomQuestion() {
   detail.className = "answer-block";
   detail.hidden = true;
   setMathHTML(detail, [
-    correctOriginalLabel ? `正确选项：${correctDisplayLabel}` : "",
+    correctLabel ? `正确选项：${correctLabel}` : "",
     question.answer ? `答案/备注：\n${question.answer}` : "",
     question.explanation ? `解析：\n${question.explanation}` : "解析：暂无"
   ].filter(Boolean).join("\n\n"));
@@ -957,13 +1003,6 @@ function normalizeAnswerContent(answer, correctAnswer, options) {
     .replace(/^the\s+correct\s+answer\s+is\s+/i, "")
     .replace(/^正确答案是?\s*/i, "")
     .trim();
-}
-function shuffleArray(items) {
-  for (let index = items.length - 1; index > 0; index -= 1) {
-    const swapIndex = Math.floor(Math.random() * (index + 1));
-    [items[index], items[swapIndex]] = [items[swapIndex], items[index]];
-  }
-  return items;
 }
 function cleanOptions(options) {
   return (options || []).map((option, index) => {
