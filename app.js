@@ -1045,7 +1045,7 @@ function cleanOptions(options) {
   });
 }
 function cleanAIText(value) {
-  return String(value || "")
+  return repairLatexEscapes(String(value || ""))
     .replace(/\\n/g, "\n")
     .replace(/\\t/g, "  ")
     .replace(/\$\s*\$/g, "")
@@ -1054,6 +1054,15 @@ function cleanAIText(value) {
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function repairLatexEscapes(value) {
+  return String(value || "")
+    .replace(/(^|[^\\A-Za-z])(?:text|ext)\s*\{/g, (match, prefix) => `${prefix}\\text{`)
+    .replace(/(^|[^\\A-Za-z])(?:frac|rac)\s*\{/g, (match, prefix) => `${prefix}\\frac{`)
+    .replace(/(^|[^\\A-Za-z])sqrt\s*\{/g, (match, prefix) => `${prefix}\\sqrt{`)
+    .replace(/(^|[^\\A-Za-z])(?:quad|qquad)(?=\s|$)/g, (match, prefix) => `${prefix}\\${match.slice(prefix.length)}`)
+    .replace(/(^|[^\\A-Za-z])Lambda(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix) => `${prefix}\\Lambda`);
 }
 function setMathHTML(element, value, highlight = "") {
   const prepared = wrapBareLatex(cleanAIText(value || ""));
