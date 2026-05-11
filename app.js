@@ -1058,9 +1058,13 @@ function cleanAIText(value) {
 
 function repairLatexEscapes(value) {
   return String(value || "")
+    .replace(/(^|[^\\A-Za-z])ext([A-Z][A-Za-z]*?)imes([A-Z][A-Za-z]*)(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix, textPart, rhs) => `${prefix}\\text{${textPart}}\\times ${rhs}`)
+    .replace(/(^|[^\\A-Za-z])ext([A-Z][A-Za-z]*)(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix, textPart) => `${prefix}\\text{${textPart}}`)
     .replace(/(^|[^\\A-Za-z])(?:text|ext)\s*\{/g, (match, prefix) => `${prefix}\\text{`)
     .replace(/(^|[^\\A-Za-z])(?:frac|rac)\s*\{/g, (match, prefix) => `${prefix}\\frac{`)
     .replace(/(^|[^\\A-Za-z])sqrt\s*\{/g, (match, prefix) => `${prefix}\\sqrt{`)
+    .replace(/(^|[^\\A-Za-z])heta(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix) => `${prefix}\\theta`)
+    .replace(/(^|[^\\A-Za-z])imes(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix) => `${prefix}\\times`)
     .replace(/(^|[^\\A-Za-z])(?:quad|qquad)(?=\s|$)/g, (match, prefix) => `${prefix}\\${match.slice(prefix.length)}`)
     .replace(/(^|[^\\A-Za-z])Lambda(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix) => `${prefix}\\Lambda`);
 }
