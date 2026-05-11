@@ -606,6 +606,32 @@ async function toggleReviewed(id) {
   renderAll();
 }
 
+async function updateQuestionReviewFields(id, fields) {
+  const updates = {
+    options: cleanOptions(fields.options || []),
+    correctAnswer: String(fields.correctAnswer || "").trim().toUpperCase(),
+    answer: cleanAIText(fields.answer || ""),
+    explanation: cleanAIText(fields.explanation || "")
+  };
+  const now = new Date().toISOString();
+  if (dbMode === "cloud") {
+    const { error } = await supabaseClient.from("questions").update({
+      options: updates.options,
+      correct_answer: updates.correctAnswer,
+      answer: updates.answer,
+      explanation: updates.explanation,
+      updated_at: now
+    }).eq("id", id);
+    if (error) throw error;
+    questions = questions.map((item) => item.id === id ? { ...item, ...updates, updatedAt: now } : item);
+    return updates;
+  }
+  questions = questions.map((item) => item.id === id ? { ...item, ...updates, updatedAt: now } : item);
+  persistQuestions();
+  renderAll();
+  return updates;
+}
+
 async function deleteQuestion(id) {
   if (!confirm("确定删除这道题吗？")) return;
   setStatus("正在删除题目...");
@@ -791,11 +817,9 @@ function renderRandomQuestion() {
   const detail = document.createElement("div");
   detail.className = "answer-block";
   detail.hidden = true;
-  setMathHTML(detail, [
-    correctLabel ? `正确选项：${correctLabel}` : "",
-    question.answer ? `答案/备注：\n${question.answer}` : "",
-    question.explanation ? `解析：\n${question.explanation}` : "解析：暂无"
-  ].filter(Boolean).join("\n\n"));
+  setMathHTML(detail, buildReviewDetailText(question, correctLabel));
+
+  const editExplanationButton = createReviewExplanationEditor(question, detail, () => renderRandomQuestion());
 
   reveal.addEventListener("click", () => {
     detail.hidden = !detail.hidden;
@@ -804,7 +828,7 @@ function renderRandomQuestion() {
 
   const actionRow = document.createElement("div");
   actionRow.className = "review-actions";
-  actionRow.append(previousButton, historyButton, confirmButton, reveal, nextButton);
+  actionRow.append(previousButton, historyButton, confirmButton, reveal, editExplanationButton, nextButton);
 
   els.reviewPanel.append(meta, text);
   if (options.children.length) els.reviewPanel.append(options, result);
@@ -867,6 +891,110 @@ function renderReviewHistory() {
   els.reviewPanel.append(list, actionRow);
 }
 
+function createReviewExplanationEditor(question, detail, onSaved = () => {}) {
+  const editButton = document.createElement("button");
+  editButton.className = "secondary-button";
+  editButton.type = "button";
+  editButton.textContent = "\u7f16\u8f91\u9898\u76ee\u5185\u5bb9";
+
+  editButton.addEventListener("click", () => {
+    const editor = document.createElement("div");
+    editor.className = "review-explanation-editor";
+
+    const optionsLabel = document.createElement("label");
+    optionsLabel.textContent = "\u9009\u9879";
+    const optionsInput = document.createElement("textarea");
+    optionsInput.rows = 6;
+    optionsInput.value = formatOptions(question.options || []);
+    optionsLabel.append(optionsInput);
+
+    const answerGrid = document.createElement("div");
+    answerGrid.className = "review-editor-grid";
+
+    const correctLabel = document.createElement("label");
+    correctLabel.textContent = "\u6b63\u786e\u9009\u9879";
+    const correctInput = document.createElement("input");
+    correctInput.type = "text";
+    correctInput.value = question.correctAnswer || "";
+    correctLabel.append(correctInput);
+
+    const answerLabel = document.createElement("label");
+    answerLabel.textContent = "\u7b54\u6848/\u5907\u6ce8";
+    const answerInput = document.createElement("textarea");
+    answerInput.rows = 3;
+    answerInput.value = question.answer || "";
+    answerLabel.append(answerInput);
+    answerGrid.append(correctLabel, answerLabel);
+
+    const explanationLabel = document.createElement("label");
+    explanationLabel.textContent = "\u89e3\u6790";
+    const explanationInput = document.createElement("textarea");
+    explanationInput.rows = 7;
+    explanationInput.value = question.explanation || "";
+    explanationLabel.append(explanationInput);
+
+    const status = document.createElement("span");
+    status.className = "review-editor-status";
+
+    const saveButton = document.createElement("button");
+    saveButton.className = "primary-button";
+    saveButton.type = "button";
+    saveButton.textContent = "\u4fdd\u5b58\u4fee\u6539";
+
+    const cancelButton = document.createElement("button");
+    cancelButton.className = "secondary-button";
+    cancelButton.type = "button";
+    cancelButton.textContent = "\u53d6\u6d88";
+
+    const editorActions = document.createElement("div");
+    editorActions.className = "review-actions";
+    editorActions.append(saveButton, cancelButton, status);
+
+    editor.append(optionsLabel, answerGrid, explanationLabel, editorActions);
+    detail.replaceWith(editor);
+    editButton.hidden = true;
+    optionsInput.focus();
+
+    cancelButton.addEventListener("click", () => {
+      editor.replaceWith(detail);
+      editButton.hidden = false;
+    });
+
+    saveButton.addEventListener("click", async () => {
+      saveButton.disabled = true;
+      status.textContent = "\u6b63\u5728\u4fdd\u5b58...";
+      try {
+        const updates = await updateQuestionReviewFields(question.id, {
+          options: parseOptions(optionsInput.value),
+          correctAnswer: correctInput.value,
+          answer: answerInput.value,
+          explanation: explanationInput.value
+        });
+        Object.assign(question, updates);
+        setMathHTML(detail, buildReviewDetailText(question));
+        editor.replaceWith(detail);
+        editButton.hidden = false;
+        status.textContent = "";
+        onSaved(updates);
+      } catch (error) {
+        console.error(error);
+        status.textContent = `\u4fdd\u5b58\u5931\u8d25\uff1a${error.message || ""}`;
+      } finally {
+        saveButton.disabled = false;
+      }
+    });
+  });
+
+  return editButton;
+}
+
+function buildReviewDetailText(question, correctLabel = String(question.correctAnswer || "").trim().toUpperCase()) {
+  return [
+    correctLabel ? `\u6b63\u786e\u9009\u9879\uff1a${correctLabel}` : "",
+    question.answer ? `\u7b54\u6848/\u5907\u6ce8\uff1a\n${question.answer}` : "",
+    question.explanation ? `\u89e3\u6790\uff1a\n${question.explanation}` : "\u89e3\u6790\uff1a\u6682\u65e0"
+  ].filter(Boolean).join("\n\n");
+}
 function renderPreviousReviewQuestion(questionId) {
   const scope = getReviewScope();
   const available = getReviewQuestionPool(scope);
@@ -929,11 +1057,8 @@ function renderPreviousReviewQuestion(questionId) {
 
   const detail = document.createElement("div");
   detail.className = "answer-block";
-  setMathHTML(detail, [
-    correctLabel ? `æ­£ç¡®é€‰é¡¹ï¼š${correctLabel}` : "",
-    question.answer ? `ç­”æ¡ˆ/å¤‡æ³¨ï¼š\n${question.answer}` : "",
-    question.explanation ? `è§£æžï¼š\n${question.explanation}` : "è§£æžï¼šæš‚æ— "
-  ].filter(Boolean).join("\n\n"));
+  setMathHTML(detail, buildReviewDetailText(question, correctLabel));
+  const editExplanationButton = createReviewExplanationEditor(question, detail, () => renderPreviousReviewQuestion(question.id));
 
   const backButton = document.createElement("button");
   backButton.className = "primary-button";
@@ -942,7 +1067,7 @@ function renderPreviousReviewQuestion(questionId) {
 
   const actionRow = document.createElement("div");
   actionRow.className = "review-actions";
-  actionRow.append(backButton);
+  actionRow.append(backButton, editExplanationButton);
 
   els.reviewPanel.append(meta, text);
   if (options.children.length) els.reviewPanel.append(options, result);

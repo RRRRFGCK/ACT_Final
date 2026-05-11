@@ -611,6 +611,36 @@ textarea:focus {
   color: var(--muted);
 }
 
+.review-explanation-editor {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.review-editor-grid {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.45fr) minmax(260px, 1fr);
+  gap: 14px;
+}
+
+.review-explanation-editor textarea {
+  min-height: 180px;
+}
+
+.review-editor-grid textarea {
+  min-height: 96px;
+}
+
+.review-explanation-editor label {
+  margin-bottom: 0;
+}
+
+.review-editor-status {
+  align-self: center;
+  color: var(--muted);
+  font-weight: 700;
+}
+
 
 .drop-zone.has-image {
   padding: 10px;
