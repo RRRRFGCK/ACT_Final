@@ -433,29 +433,47 @@ function getReviewProgress(scope, available) {
   const savedCompletedIds = Array.isArray(saved.completedIds) ? saved.completedIds : completedFromIndex;
   const completedIds = savedCompletedIds.filter((id) => availableIdSet.has(id));
   const completedIdSet = new Set(completedIds);
-  const currentId = questionIds.find((id) => !completedIdSet.has(id)) || null;
+  const wrongIds = Array.isArray(saved.wrongIds) ? saved.wrongIds.filter((id) => availableIdSet.has(id)) : [];
+  const redoCompletedIds = Array.isArray(saved.redoCompletedIds) ? saved.redoCompletedIds.filter((id) => availableIdSet.has(id)) : [];
+  const redoCompletedIdSet = new Set(redoCompletedIds);
+  const currentId = questionIds.find((id) => !completedIdSet.has(id)) || wrongIds.find((id) => !redoCompletedIdSet.has(id)) || null;
+  const isRedo = Boolean(currentId && completedIdSet.has(currentId));
   return {
     key,
     questionIds,
     completedIds,
-    completedCount: completedIds.length,
+    wrongIds,
+    redoCompletedIds,
+    completedCount: completedIds.length + redoCompletedIds.length,
     currentId,
-    total: availableIds.length
+    isRedo,
+    total: availableIds.length + wrongIds.length
   };
 }
 
-function saveReviewProgress(key, progress, completedQuestionId = null, mergeExisting = true) {
+function saveReviewProgress(key, progress, result = {}, mergeExisting = true) {
   const store = loadReviewProgressStore();
   const existing = store[key] || {};
   const existingQuestionIds = mergeExisting && Array.isArray(existing.questionIds) ? existing.questionIds : [];
   const existingCompletedIds = mergeExisting && Array.isArray(existing.completedIds) ? existing.completedIds : [];
+  const existingWrongIds = mergeExisting && Array.isArray(existing.wrongIds) ? existing.wrongIds : [];
+  const existingRedoCompletedIds = mergeExisting && Array.isArray(existing.redoCompletedIds) ? existing.redoCompletedIds : [];
+  const completedQuestionId = result.completedQuestionId || null;
   const questionIds = [...new Set([...(progress.questionIds || []), ...existingQuestionIds])];
   const completedIds = completedQuestionId
     ? [...new Set([...(progress.completedIds || []), ...existingCompletedIds, completedQuestionId])]
     : [...new Set([...(progress.completedIds || []), ...existingCompletedIds])];
+  const wrongIds = result.wrongQuestionId
+    ? [...new Set([...(progress.wrongIds || []), ...existingWrongIds, result.wrongQuestionId])]
+    : [...new Set([...(progress.wrongIds || []), ...existingWrongIds])];
+  const redoCompletedIds = result.redoQuestionId
+    ? [...new Set([...(progress.redoCompletedIds || []), ...existingRedoCompletedIds, result.redoQuestionId])]
+    : [...new Set([...(progress.redoCompletedIds || []), ...existingRedoCompletedIds])];
   store[key] = {
     questionIds,
     completedIds,
+    wrongIds,
+    redoCompletedIds,
     updatedAt: new Date().toISOString()
   };
   saveReviewProgressStore(store);
@@ -465,7 +483,7 @@ function resetCurrentReviewProgress() {
   const scope = getReviewScope();
   const available = getReviewQuestionPool(scope);
   const key = getReviewScopeKey(scope);
-  saveReviewProgress(key, { questionIds: getReviewQuestionIds(available), completedIds: [] }, null, false);
+  saveReviewProgress(key, { questionIds: getReviewQuestionIds(available), completedIds: [], wrongIds: [], redoCompletedIds: [] }, {}, false);
   currentReviewQuestionId = null;
   renderRandomQuestion();
 }
@@ -609,7 +627,7 @@ function renderRandomQuestion() {
     els.reviewPanel.innerHTML = `
       <div class="review-complete">
         <h3>这一套刷完了</h3>
-        <p>进度 ${available.length}/${available.length}。可以重置后再刷一遍，或者换一个章节。</p>
+        <p>进度 ${progress.total}/${progress.total}。可以重置后再刷一遍，或者换一个章节。</p>
         <button class="primary-button" type="button" id="completeResetButton">重置这套进度</button>
       </div>
     `;
@@ -621,7 +639,9 @@ function renderRandomQuestion() {
   if (!question) {
     saveReviewProgress(progress.key, {
       questionIds: getReviewQuestionIds(available),
-      completedIds: progress.completedIds
+      completedIds: progress.completedIds,
+      wrongIds: progress.wrongIds,
+      redoCompletedIds: progress.redoCompletedIds
     });
     renderRandomQuestion();
     return;
@@ -632,7 +652,7 @@ function renderRandomQuestion() {
 
   const progressLine = document.createElement("div");
   progressLine.className = "review-progress-line";
-  progressLine.textContent = `\u8fdb\u5ea6 ${progress.completedCount + 1}/${progress.total}`;
+  progressLine.textContent = `\u8fdb\u5ea6 ${progress.completedCount + 1}/${progress.total}${progress.isRedo ? " \u00b7 \u9519\u9898\u91cd\u505a" : ""}`;
   els.reviewPanel.append(progressLine);
 
   if (question.imageData) {
@@ -699,7 +719,8 @@ function renderRandomQuestion() {
     }
 
     result.hidden = false;
-    if (correctLabel && selectedChoice === correctLabel) {
+    const isCorrect = Boolean(correctLabel && selectedChoice === correctLabel);
+    if (isCorrect) {
       result.className = "answer-result correct";
       result.textContent = `答对了：${selectedChoice}`;
     } else if (correctLabel) {
@@ -710,7 +731,14 @@ function renderRandomQuestion() {
       result.textContent = `已选择 ${selectedChoice}，这题还没有标准答案。`;
     }
 
-    saveReviewProgress(progress.key, progress, question.id);
+    saveReviewProgress(progress.key, progress, {
+      completedQuestionId: progress.isRedo ? null : question.id,
+      wrongQuestionId: !progress.isRedo && correctLabel && !isCorrect ? question.id : null,
+      redoQuestionId: progress.isRedo ? question.id : null
+    });
+    if (!progress.isRedo && correctLabel && !isCorrect) {
+      nextButton.textContent = "\u4e0b\u4e00\u9898";
+    }
     confirmButton.disabled = true;
     options.querySelectorAll(".choice-button").forEach((item) => { item.disabled = true; });
     nextButton.hidden = false;
