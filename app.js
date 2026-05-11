@@ -1058,6 +1058,10 @@ function cleanAIText(value) {
 
 function repairLatexEscapes(value) {
   return String(value || "")
+    .replace(/extCRB/g, "\\text{CRB}")
+    .replace(/extSNRimesL/g, "\\text{SNR}\\times L")
+    .replace(/extSNR/g, "\\text{SNR}")
+    .replace(/(?<=[[\s])heta(?=[]\s])/g, "\\theta")
     .replace(/(^|[^\\A-Za-z])ext([A-Z][A-Za-z]*?)imes([A-Z][A-Za-z]*)(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix, textPart, rhs) => `${prefix}\\text{${textPart}}\\times ${rhs}`)
     .replace(/(^|[^\\A-Za-z])ext([A-Z][A-Za-z]*)(?=\s|[$}()[\],.;:+\-*/=]|$)/g, (match, prefix, textPart) => `${prefix}\\text{${textPart}}`)
     .replace(/(^|[^\\A-Za-z])(?:text|ext)\s*\{/g, (match, prefix) => `${prefix}\\text{`)
