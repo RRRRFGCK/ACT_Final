@@ -519,6 +519,21 @@ textarea:focus {
   background: #edf7f4;
 }
 
+.choice-button:disabled {
+  cursor: default;
+}
+
+.choice-button:disabled:hover {
+  border-color: var(--line);
+  background: #fff;
+}
+
+.choice-button.selected:disabled,
+.choice-button.selected:disabled:hover {
+  border-color: var(--accent);
+  background: #edf7f4;
+}
+
 .review-image {
   display: block;
   width: 760px;
@@ -566,6 +581,34 @@ textarea:focus {
   flex-wrap: wrap;
   gap: 10px;
   margin: 14px 0;
+}
+
+.review-history-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.review-history-item {
+  display: grid;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: #fff;
+  color: var(--ink);
+  text-align: left;
+}
+
+.review-history-item:hover {
+  border-color: var(--accent);
+  background: #edf7f4;
+}
+
+.review-history-item span,
+.review-history-item small {
+  color: var(--muted);
 }
 
 

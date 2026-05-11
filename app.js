@@ -438,12 +438,19 @@ function getReviewProgress(scope, available) {
   const redoCompletedIdSet = new Set(redoCompletedIds);
   const currentId = questionIds.find((id) => !completedIdSet.has(id)) || wrongIds.find((id) => !redoCompletedIdSet.has(id)) || null;
   const isRedo = Boolean(currentId && completedIdSet.has(currentId));
+  const reviewOrder = [...questionIds, ...wrongIds];
+  const historyIds = [...completedIds, ...redoCompletedIds].filter((id) => availableIdSet.has(id));
+  const previousId = historyIds.at(-1) || null;
   return {
     key,
     questionIds,
     completedIds,
     wrongIds,
     redoCompletedIds,
+    attempts: saved.attempts || {},
+    previousId,
+    reviewOrder,
+    historyIds,
     completedCount: completedIds.length + redoCompletedIds.length,
     currentId,
     isRedo,
@@ -458,6 +465,7 @@ function saveReviewProgress(key, progress, result = {}, mergeExisting = true) {
   const existingCompletedIds = mergeExisting && Array.isArray(existing.completedIds) ? existing.completedIds : [];
   const existingWrongIds = mergeExisting && Array.isArray(existing.wrongIds) ? existing.wrongIds : [];
   const existingRedoCompletedIds = mergeExisting && Array.isArray(existing.redoCompletedIds) ? existing.redoCompletedIds : [];
+  const existingAttempts = mergeExisting && existing.attempts && typeof existing.attempts === "object" ? existing.attempts : {};
   const completedQuestionId = result.completedQuestionId || null;
   const questionIds = [...new Set([...(progress.questionIds || []), ...existingQuestionIds])];
   const completedIds = completedQuestionId
@@ -469,11 +477,22 @@ function saveReviewProgress(key, progress, result = {}, mergeExisting = true) {
   const redoCompletedIds = result.redoQuestionId
     ? [...new Set([...(progress.redoCompletedIds || []), ...existingRedoCompletedIds, result.redoQuestionId])]
     : [...new Set([...(progress.redoCompletedIds || []), ...existingRedoCompletedIds])];
+  const attempts = { ...(progress.attempts || {}), ...existingAttempts };
+  if (result.attemptQuestionId) {
+    attempts[result.attemptQuestionId] = {
+      selectedChoice: result.selectedChoice || "",
+      correctLabel: result.correctLabel || "",
+      isCorrect: Boolean(result.isCorrect),
+      isRedo: Boolean(result.isRedo),
+      answeredAt: new Date().toISOString()
+    };
+  }
   store[key] = {
     questionIds,
     completedIds,
     wrongIds,
     redoCompletedIds,
+    attempts,
     updatedAt: new Date().toISOString()
   };
   saveReviewProgressStore(store);
@@ -483,7 +502,7 @@ function resetCurrentReviewProgress() {
   const scope = getReviewScope();
   const available = getReviewQuestionPool(scope);
   const key = getReviewScopeKey(scope);
-  saveReviewProgress(key, { questionIds: getReviewQuestionIds(available), completedIds: [], wrongIds: [], redoCompletedIds: [] }, {}, false);
+  saveReviewProgress(key, { questionIds: getReviewQuestionIds(available), completedIds: [], wrongIds: [], redoCompletedIds: [], attempts: {} }, {}, false);
   currentReviewQuestionId = null;
   renderRandomQuestion();
 }
@@ -628,9 +647,12 @@ function renderRandomQuestion() {
       <div class="review-complete">
         <h3>这一套刷完了</h3>
         <p>进度 ${progress.total}/${progress.total}。可以重置后再刷一遍，或者换一个章节。</p>
+        ${progress.historyIds.length ? `<button class="secondary-button" type="button" id="completeHistoryButton">\u67e5\u770b\u5df2\u505a\u9898\u76ee</button>` : ""}
+
         <button class="primary-button" type="button" id="completeResetButton">重置这套进度</button>
       </div>
     `;
+    document.getElementById("completeHistoryButton")?.addEventListener("click", () => renderReviewHistory());
     document.getElementById("completeResetButton")?.addEventListener("click", resetCurrentReviewProgress);
     return;
   }
@@ -641,7 +663,8 @@ function renderRandomQuestion() {
       questionIds: getReviewQuestionIds(available),
       completedIds: progress.completedIds,
       wrongIds: progress.wrongIds,
-      redoCompletedIds: progress.redoCompletedIds
+      redoCompletedIds: progress.redoCompletedIds,
+      attempts: progress.attempts
     });
     renderRandomQuestion();
     return;
@@ -710,6 +733,18 @@ function renderRandomQuestion() {
   nextButton.hidden = true;
   nextButton.addEventListener("click", renderRandomQuestion);
 
+  const previousButton = document.createElement("button");
+  previousButton.className = "secondary-button";
+  previousButton.textContent = "\u4e0a\u4e00\u9898";
+  previousButton.hidden = !progress.previousId;
+  previousButton.addEventListener("click", () => renderPreviousReviewQuestion(progress.previousId));
+
+  const historyButton = document.createElement("button");
+  historyButton.className = "secondary-button";
+  historyButton.textContent = "\u5df2\u505a\u9898\u76ee";
+  historyButton.hidden = !progress.historyIds.length;
+  historyButton.addEventListener("click", () => renderReviewHistory());
+
   confirmButton.addEventListener("click", () => {
     if (!selectedChoice) {
       result.hidden = false;
@@ -734,7 +769,12 @@ function renderRandomQuestion() {
     saveReviewProgress(progress.key, progress, {
       completedQuestionId: progress.isRedo ? null : question.id,
       wrongQuestionId: !progress.isRedo && correctLabel && !isCorrect ? question.id : null,
-      redoQuestionId: progress.isRedo ? question.id : null
+      redoQuestionId: progress.isRedo ? question.id : null,
+      attemptQuestionId: question.id,
+      selectedChoice,
+      correctLabel,
+      isCorrect,
+      isRedo: progress.isRedo
     });
     if (!progress.isRedo && correctLabel && !isCorrect) {
       nextButton.textContent = "\u4e0b\u4e00\u9898";
@@ -764,7 +804,145 @@ function renderRandomQuestion() {
 
   const actionRow = document.createElement("div");
   actionRow.className = "review-actions";
-  actionRow.append(confirmButton, reveal, nextButton);
+  actionRow.append(previousButton, historyButton, confirmButton, reveal, nextButton);
+
+  els.reviewPanel.append(meta, text);
+  if (options.children.length) els.reviewPanel.append(options, result);
+  els.reviewPanel.append(actionRow, detail);
+  renderMath(els.reviewPanel);
+}
+
+function renderReviewHistory() {
+  const scope = getReviewScope();
+  const available = getReviewQuestionPool(scope);
+  const progress = getReviewProgress(scope, available);
+  const historyIds = [...new Set(progress.historyIds)].filter((id) => available.some((question) => question.id === id));
+
+  els.reviewPanel.innerHTML = "";
+
+  const progressLine = document.createElement("div");
+  progressLine.className = "review-progress-line";
+  progressLine.textContent = "\u5df2\u505a\u9898\u76ee";
+  els.reviewPanel.append(progressLine);
+
+  if (!historyIds.length) {
+    els.reviewPanel.innerHTML += `<p class="empty-state">\u8fd8\u6ca1\u6709\u53ef\u56de\u770b\u7684\u9898\u76ee\u3002</p>`;
+    return;
+  }
+
+  const list = document.createElement("div");
+  list.className = "review-history-list";
+  historyIds.forEach((id, index) => {
+    const question = available.find((item) => item.id === id);
+    const attempt = progress.attempts?.[id] || {};
+    const button = document.createElement("button");
+    button.className = "review-history-item";
+    button.type = "button";
+
+    const title = document.createElement("strong");
+    title.textContent = `${index + 1}. ${[question.course, question.topic].filter(Boolean).join(" / ") || "\u5df2\u505a\u9898\u76ee"}`;
+
+    const meta = document.createElement("span");
+    const selected = attempt.selectedChoice ? `\u4f60\u9009 ${attempt.selectedChoice}` : "\u65e0\u9009\u62e9\u8bb0\u5f55";
+    const correctness = attempt.selectedChoice ? (attempt.isCorrect ? "\u7b54\u5bf9" : "\u7b54\u9519") : "";
+    meta.textContent = [selected, correctness].filter(Boolean).join(" · ");
+
+    const preview = document.createElement("small");
+    preview.textContent = cleanAIText(question.text || "").slice(0, 140);
+
+    button.append(title, meta, preview);
+    button.addEventListener("click", () => renderPreviousReviewQuestion(id));
+    list.append(button);
+  });
+
+  const backButton = document.createElement("button");
+  backButton.className = "primary-button";
+  backButton.textContent = "\u8fd4\u56de\u7ee7\u7eed\u5237\u9898";
+  backButton.addEventListener("click", renderRandomQuestion);
+
+  const actionRow = document.createElement("div");
+  actionRow.className = "review-actions";
+  actionRow.append(backButton);
+
+  els.reviewPanel.append(list, actionRow);
+}
+
+function renderPreviousReviewQuestion(questionId) {
+  const scope = getReviewScope();
+  const available = getReviewQuestionPool(scope);
+  const progress = getReviewProgress(scope, available);
+  const question = available.find((item) => item.id === questionId);
+  if (!question) {
+    renderRandomQuestion();
+    return;
+  }
+
+  const attempt = progress.attempts?.[question.id] || {};
+  const selectedChoice = attempt.selectedChoice || "";
+  const correctLabel = attempt.correctLabel || String(question.correctAnswer || "").trim().toUpperCase();
+  els.reviewPanel.innerHTML = "";
+
+  const progressLine = document.createElement("div");
+  progressLine.className = "review-progress-line";
+  progressLine.textContent = "\u4e0a\u4e00\u9898\u56de\u770b";
+  els.reviewPanel.append(progressLine);
+
+  if (question.imageData) {
+    const image = document.createElement("img");
+    image.className = "review-image";
+    image.src = question.imageData;
+    image.alt = "é¢˜ç›®åŽŸå›¾";
+    els.reviewPanel.append(image);
+  }
+
+  const meta = document.createElement("div");
+  meta.className = "chips";
+  [question.course, question.topic, question.type, question.difficulty].forEach((label) => {
+    if (!label) return;
+    const chip = document.createElement("span");
+    chip.className = "chip";
+    chip.textContent = label;
+    meta.append(chip);
+  });
+
+  const text = document.createElement("p");
+  text.className = question.imageData ? "question-index-text" : "review-question";
+  setMathHTML(text, question.imageData ? `AI è¯†åˆ«æ–‡å­—ï¼š${question.text}` : question.text);
+
+  const options = document.createElement("div");
+  options.className = "choice-list";
+  (question.options || []).forEach((option, index) => {
+    const button = document.createElement("button");
+    button.className = "choice-button";
+    const label = (option.label || String.fromCharCode(65 + index)).toUpperCase();
+    button.disabled = true;
+    if (label === selectedChoice) button.classList.add("selected");
+    setMathHTML(button, `${label}. ${option.text || ""}`);
+    options.append(button);
+  });
+
+  const result = document.createElement("div");
+  result.className = `answer-result${attempt.isCorrect ? " correct" : correctLabel ? " wrong" : ""}`;
+  result.textContent = selectedChoice
+    ? `\u4f60\u521a\u624d\u9009\u4e86 ${selectedChoice}${correctLabel ? `\uff0c\u6b63\u786e\u7b54\u6848\u662f ${correctLabel}` : ""}`
+    : "\u8fd9\u9898\u6682\u65f6\u6ca1\u6709\u9009\u62e9\u8bb0\u5f55\u3002";
+
+  const detail = document.createElement("div");
+  detail.className = "answer-block";
+  setMathHTML(detail, [
+    correctLabel ? `æ­£ç¡®é€‰é¡¹ï¼š${correctLabel}` : "",
+    question.answer ? `ç­”æ¡ˆ/å¤‡æ³¨ï¼š\n${question.answer}` : "",
+    question.explanation ? `è§£æžï¼š\n${question.explanation}` : "è§£æžï¼šæš‚æ— "
+  ].filter(Boolean).join("\n\n"));
+
+  const backButton = document.createElement("button");
+  backButton.className = "primary-button";
+  backButton.textContent = "\u8fd4\u56de\u7ee7\u7eed\u5237\u9898";
+  backButton.addEventListener("click", renderRandomQuestion);
+
+  const actionRow = document.createElement("div");
+  actionRow.className = "review-actions";
+  actionRow.append(backButton);
 
   els.reviewPanel.append(meta, text);
   if (options.children.length) els.reviewPanel.append(options, result);
